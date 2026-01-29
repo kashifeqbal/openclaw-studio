@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { logger } from "@/lib/logger";
 import type { ProjectTileUpdatePayload } from "@/lib/projects/types";
+import { resolveAgentWorkspaceDir } from "@/lib/projects/agentWorkspace";
 import { deleteAgentArtifacts } from "@/lib/projects/fs.server";
 import { resolveProjectTile } from "@/lib/projects/resolve";
 import {

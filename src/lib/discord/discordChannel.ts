@@ -1,9 +1,8 @@
 import fs from "node:fs";
-import os from "node:os";
-import path from "node:path";
 
 import { slugifyProjectName } from "../ids/slugify";
 import { loadClawdbotConfig, saveClawdbotConfig } from "../clawdbot/config";
+import { resolveClawdbotEnvPath } from "@/lib/clawdbot/paths";
 
 type DiscordChannelCreateResult = {
   channelId: string;
@@ -13,11 +12,10 @@ type DiscordChannelCreateResult = {
   warnings: string[];
 };
 
-const ENV_PATH = path.join(os.homedir(), ".clawdbot", ".env");
-
 const readEnvValue = (key: string) => {
-  if (!fs.existsSync(ENV_PATH)) return null;
-  const lines = fs.readFileSync(ENV_PATH, "utf8").split(/\r?\n/);
+  const envPath = resolveClawdbotEnvPath();
+  if (!fs.existsSync(envPath)) return null;
+  const lines = fs.readFileSync(envPath, "utf8").split(/\r?\n/);
   for (const line of lines) {
     const trimmed = line.trim();
     if (!trimmed || trimmed.startsWith("#")) continue;

@@ -1,26 +1,11 @@
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 
+import { resolveStateDir } from "@/lib/clawdbot/paths";
 import { resolveAgentWorkspaceDir } from "./agentWorkspace";
 
-export const resolveHomePath = (inputPath: string) => {
-  if (inputPath === "~") {
-    return os.homedir();
-  }
-  if (inputPath.startsWith("~/")) {
-    return path.join(os.homedir(), inputPath.slice(2));
-  }
-  return inputPath;
-};
-
-export const resolveClawdbotStateDir = () => {
-  const stateDirRaw = process.env.CLAWDBOT_STATE_DIR ?? "~/.clawdbot";
-  return resolveHomePath(stateDirRaw);
-};
-
 export const resolveAgentStateDir = (agentId: string) => {
-  return path.join(resolveClawdbotStateDir(), "agents", agentId);
+  return path.join(resolveStateDir(), "agents", agentId);
 };
 
 export const deleteDirIfExists = (targetPath: string, label: string, warnings: string[]) => {

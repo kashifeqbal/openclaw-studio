@@ -13,7 +13,7 @@ import type {
   ProjectsStore,
 } from "@/lib/projects/types";
 import { resolveAgentWorkspaceDir } from "@/lib/projects/agentWorkspace";
-import { resolveClawdbotStateDir } from "@/lib/projects/fs.server";
+import { resolveStateDir } from "@/lib/clawdbot/paths";
 import { resolveProject } from "@/lib/projects/resolve";
 import {
   loadClawdbotConfig,
@@ -30,7 +30,7 @@ const ROLE_VALUES: ProjectTileRole[] = ["coding", "research", "marketing"];
 
 const copyAuthProfiles = (agentId: string): string[] => {
   const warnings: string[] = [];
-  const stateDir = resolveClawdbotStateDir();
+  const stateDir = resolveStateDir();
   const sourceAgentId = process.env.CLAWDBOT_DEFAULT_AGENT_ID ?? "main";
   const source = path.join(stateDir, "agents", sourceAgentId, "agent", "auth-profiles.json");
   const destination = path.join(stateDir, "agents", agentId, "agent", "auth-profiles.json");

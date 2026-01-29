@@ -5,7 +5,7 @@ import fs from "node:fs";
 import path from "node:path";
 
 import { logger } from "@/lib/logger";
-import { resolveHomePath } from "@/lib/projects/fs.server";
+import { resolveUserPath } from "@/lib/clawdbot/paths";
 import type {
   Project,
   ProjectOpenPayload,
@@ -38,13 +38,13 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Workspace path is required." }, { status: 400 });
     }
 
-    const resolvedPath = resolveHomePath(rawPath);
-    if (!path.isAbsolute(resolvedPath)) {
+    if (!path.isAbsolute(rawPath) && rawPath !== "~" && !rawPath.startsWith("~/")) {
       return NextResponse.json(
         { error: "Workspace path must be an absolute path." },
         { status: 400 }
       );
     }
+    const resolvedPath = resolveUserPath(rawPath);
     if (!fs.existsSync(resolvedPath)) {
       return NextResponse.json(
         { error: `Workspace path does not exist: ${resolvedPath}` },
