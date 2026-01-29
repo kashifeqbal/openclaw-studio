@@ -21,6 +21,7 @@ import {
 import { generateAgentId } from "@/lib/ids/agentId";
 import { provisionWorkspaceFiles } from "@/lib/projects/workspaceFiles.server";
 import { addTileToProject, loadStore, saveStore } from "../../store";
+import { buildSessionKey } from "@/lib/projects/sessionKey";
 
 export const runtime = "nodejs";
 
@@ -84,7 +85,7 @@ export async function POST(
         { status: 409 }
       );
     }
-    const sessionKey = `agent:${agentId}:main`;
+    const sessionKey = buildSessionKey(agentId);
     const offset = project.tiles.length * 36;
     const workspaceDir = resolveAgentWorkspaceDir(resolvedProjectId, agentId);
     const tile: ProjectTile = {

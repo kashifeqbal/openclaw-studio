@@ -25,6 +25,7 @@ import {
   updateProjectTile as apiUpdateProjectTile,
   saveProjectsStore,
 } from "@/lib/projects/client";
+import { buildSessionKey } from "@/lib/projects/sessionKey";
 
 export type AgentStatus = "idle" | "running" | "error";
 
@@ -85,8 +86,6 @@ const initialState: CanvasState = {
   loading: true,
   error: null,
 };
-
-const buildSessionKey = (agentId: string) => `agent:${agentId}:main`;
 
 const clampTileHeight = (height: number) =>
   Math.min(MAX_TILE_HEIGHT, Math.max(MIN_TILE_SIZE.height, height));

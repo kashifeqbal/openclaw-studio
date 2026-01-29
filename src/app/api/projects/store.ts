@@ -3,6 +3,7 @@ import path from "node:path";
 
 import type { Project, ProjectTile, ProjectsStore } from "@/lib/projects/types";
 import { resolveAgentCanvasDir } from "@/lib/projects/agentWorkspace";
+import { parseAgentIdFromSessionKey } from "@/lib/projects/sessionKey";
 
 const STORE_VERSION: ProjectsStore["version"] = 2;
 const STORE_DIR = resolveAgentCanvasDir();
@@ -119,11 +120,6 @@ export const removeTileFromProject = (
   return { store: nextStore, removed };
 };
 
-const parseAgentId = (sessionKey: string): string => {
-  const match = sessionKey.match(/^agent:([^:]+):/);
-  return match ? match[1] : "main";
-};
-
 type RawTile = {
   id: string;
   name: string;
@@ -149,7 +145,9 @@ const migrateV1Store = (store: { activeProjectId?: string | null; projects: RawP
     ...project,
     tiles: project.tiles.map((tile) => ({
       ...tile,
-      agentId: parseAgentId(typeof tile.sessionKey === "string" ? tile.sessionKey : ""),
+      agentId: parseAgentIdFromSessionKey(
+        typeof tile.sessionKey === "string" ? tile.sessionKey : ""
+      ),
       role: "coding" as const,
     })),
   }));
