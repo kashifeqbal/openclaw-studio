@@ -162,7 +162,7 @@ const CanvasFlowInner = ({
   );
 
   useEffect(() => {
-    setNodes((prevNodes) =>
+    setNodes(() =>
       nodesFromTiles.map((node) => {
         const override = resizeOverridesRef.current.get(node.id);
         if (!override) return node;

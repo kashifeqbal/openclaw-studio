@@ -430,7 +430,7 @@ const AgentCanvasPage = () => {
     return () => {
       cancelled = true;
     };
-  }, [client, status]);
+  }, [buildAllowedModelKeys, client, status]);
 
   useEffect(() => {
     const node = viewportRef.current;
