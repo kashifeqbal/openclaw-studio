@@ -15,15 +15,15 @@ const statusStyles: Record<GatewayStatus, { label: string; className: string }> 
   {
     disconnected: {
       label: "Disconnected",
-      className: "bg-slate-200 text-slate-700",
+      className: "bg-muted text-muted-foreground",
     },
     connecting: {
       label: "Connecting",
-      className: "bg-amber-200 text-amber-900",
+      className: "bg-secondary text-secondary-foreground",
     },
     connected: {
       label: "Connected",
-      className: "bg-emerald-200 text-emerald-900",
+      className: "bg-primary text-primary-foreground",
     },
   };
 
@@ -45,12 +45,12 @@ export const ConnectionPanel = ({
     <div className="flex flex-col gap-3">
       <div className="flex flex-wrap items-center gap-3">
         <span
-          className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-wide ${statusConfig.className}`}
+          className={`inline-flex items-center rounded-lg px-3 py-1 text-xs font-semibold uppercase tracking-wide ${statusConfig.className}`}
         >
           {statusConfig.label}
         </span>
         <button
-          className="rounded-full border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-900 transition hover:border-slate-400 disabled:cursor-not-allowed disabled:opacity-60"
+          className="rounded-lg border border-input px-4 py-2 text-sm font-semibold text-foreground transition hover:border-ring disabled:cursor-not-allowed disabled:opacity-60"
           type="button"
           onClick={isConnected ? onDisconnect : onConnect}
           disabled={isConnecting || !gatewayUrl.trim()}
@@ -59,10 +59,10 @@ export const ConnectionPanel = ({
         </button>
       </div>
       <div className="grid gap-3 lg:grid-cols-[1.4fr_1fr]">
-        <label className="flex flex-col gap-1 text-xs font-semibold uppercase tracking-wide text-slate-600">
+        <label className="flex flex-col gap-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
           Gateway URL
           <input
-            className="h-10 rounded-full border border-slate-300 bg-white/80 px-4 text-sm text-slate-900 outline-none transition focus:border-slate-500"
+            className="h-10 rounded-lg border border-input bg-background px-4 text-sm text-foreground outline-none transition focus:border-ring"
             type="text"
             value={gatewayUrl}
             onChange={(event) => onGatewayUrlChange(event.target.value)}
@@ -70,10 +70,10 @@ export const ConnectionPanel = ({
             spellCheck={false}
           />
         </label>
-        <label className="flex flex-col gap-1 text-xs font-semibold uppercase tracking-wide text-slate-600">
+        <label className="flex flex-col gap-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
           Token
           <input
-            className="h-10 rounded-full border border-slate-300 bg-white/80 px-4 text-sm text-slate-900 outline-none transition focus:border-slate-500"
+            className="h-10 rounded-lg border border-input bg-background px-4 text-sm text-foreground outline-none transition focus:border-ring"
             type="password"
             value={token}
             onChange={(event) => onTokenChange(event.target.value)}
@@ -83,7 +83,7 @@ export const ConnectionPanel = ({
         </label>
       </div>
       {error ? (
-        <p className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-2 text-sm text-rose-700">
+        <p className="rounded-lg border border-destructive bg-destructive px-4 py-2 text-sm text-destructive-foreground">
           {error}
         </p>
       ) : null}

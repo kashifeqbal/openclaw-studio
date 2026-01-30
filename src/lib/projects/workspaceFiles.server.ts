@@ -7,6 +7,12 @@ import {
   type WorkspaceFileName,
 } from "./workspaceFiles";
 
+const PREVIOUS_AGENTS_LINE =
+  "After every reply, end with one concise plain-English sentence summarizing what you accomplished in that reply.";
+const DEFAULT_AGENTS_LINE =
+  "End every reply with a final line in this exact format: Summary: <one plain-English sentence>. Do not add any text after the Summary line. Keep it on a single line, no markdown, no extra punctuation.";
+const DEFAULT_AGENTS_CONTENT = `${DEFAULT_AGENTS_LINE}\n`;
+
 const ensureDir = (dir: string) => {
   if (fs.existsSync(dir)) {
     const stat = fs.statSync(dir);
@@ -23,6 +29,37 @@ const ensureFile = (filePath: string, contents: string) => {
     return;
   }
   fs.writeFileSync(filePath, contents, "utf8");
+};
+
+const ensureAgentsFile = (workspaceDir: string) => {
+  const filePath = path.join(workspaceDir, "AGENTS.md");
+  if (!fs.existsSync(filePath)) {
+    fs.writeFileSync(filePath, DEFAULT_AGENTS_CONTENT, "utf8");
+    return;
+  }
+  const stat = fs.statSync(filePath);
+  if (!stat.isFile()) {
+    throw new Error("AGENTS.md exists but is not a file.");
+  }
+  const current = fs.readFileSync(filePath, "utf8");
+  if (current.includes(DEFAULT_AGENTS_LINE)) {
+    return;
+  }
+  let nextContent = current;
+  if (nextContent.includes(PREVIOUS_AGENTS_LINE)) {
+    nextContent = nextContent.replace(PREVIOUS_AGENTS_LINE, DEFAULT_AGENTS_LINE);
+  }
+  if (nextContent.includes(DEFAULT_AGENTS_LINE)) {
+    fs.writeFileSync(filePath, nextContent, "utf8");
+    return;
+  }
+  const trimmed = nextContent.trimEnd();
+  if (!trimmed) {
+    fs.writeFileSync(filePath, DEFAULT_AGENTS_CONTENT, "utf8");
+    return;
+  }
+  const next = `${trimmed}\n\n${DEFAULT_AGENTS_LINE}\n`;
+  fs.writeFileSync(filePath, next, "utf8");
 };
 
 const deleteFileIfExists = (filePath: string) => {
@@ -83,7 +120,9 @@ export const provisionWorkspaceFiles = (workspaceDir: string): { warnings: strin
   ensureDir(workspaceDir);
   deleteFileIfExists(path.join(workspaceDir, "BOOTSTRAP.md"));
 
+  ensureAgentsFile(workspaceDir);
   for (const name of WORKSPACE_FILE_NAMES) {
+    if (name === "AGENTS.md") continue;
     ensureFile(path.join(workspaceDir, name), "");
   }
 

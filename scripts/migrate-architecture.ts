@@ -14,10 +14,10 @@ const WORKSPACE_FILE_NAMES = [
 ];
 const WORKSPACE_IGNORE_ENTRIES = [...WORKSPACE_FILE_NAMES, "memory/"];
 const STORE_VERSION = 3;
-const LEGACY_STATE_DIRNAMES = [".clawdbot", ".moltbot", ".moldbot"];
+const LEGACY_STATE_DIRNAMES = [".clawdbot", ".moltbot"];
 const NEW_STATE_DIRNAME = ".openclaw";
 const CONFIG_FILENAME = "openclaw.json";
-const LEGACY_CONFIG_FILENAMES = ["clawdbot.json", "moltbot.json", "moldbot.json"];
+const LEGACY_CONFIG_FILENAMES = ["clawdbot.json", "moltbot.json"];
 
 const resolveUserPath = (input, homedir = os.homedir) => {
   const trimmed = input.trim();

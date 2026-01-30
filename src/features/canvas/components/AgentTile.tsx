@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { AgentTile as AgentTileType, TileSize } from "@/features/canvas/state/store";
 import { isTraceMarkdown, stripTraceMarkdown } from "@/lib/text/extractThinking";
+import { extractSummaryText } from "@/lib/text/summary";
 import { normalizeAgentName } from "@/lib/names/agentNames";
 import { Settings, Shuffle } from "lucide-react";
 import {
@@ -319,12 +320,16 @@ export const AgentTile = ({
 
   const statusColor =
     tile.status === "running"
-      ? "bg-emerald-200 text-emerald-900"
+      ? "bg-primary text-primary-foreground"
       : tile.status === "error"
-        ? "bg-rose-200 text-rose-900"
-        : "bg-amber-200 text-amber-900";
+        ? "bg-destructive text-destructive-foreground"
+        : "bg-accent text-accent-foreground border border-border shadow-sm";
   const statusLabel =
-    tile.status === "running" ? "Running" : tile.status === "error" ? "Error" : "Idle";
+    tile.status === "running"
+      ? "Running"
+      : tile.status === "error"
+        ? "Error"
+        : "Waiting for direction";
   const latestTraceLine = (() => {
     for (let index = tile.outputLines.length - 1; index >= 0; index -= 1) {
       const line = tile.outputLines[index];
@@ -345,9 +350,9 @@ export const AgentTile = ({
       if (streamText) return streamText;
     }
     const latestPreview = tile.latestPreview?.trim();
-    if (latestPreview) return latestPreview;
+    if (latestPreview) return extractSummaryText(latestPreview);
     const lastResult = tile.lastResult?.trim();
-    if (lastResult) return lastResult;
+    if (lastResult) return extractSummaryText(lastResult);
     for (let index = tile.outputLines.length - 1; index >= 0; index -= 1) {
       const line = tile.outputLines[index];
       if (!line) continue;
@@ -355,7 +360,7 @@ export const AgentTile = ({
       if (!trimmed) continue;
       if (isTraceMarkdown(trimmed)) continue;
       if (trimmed.startsWith(">")) continue;
-      return trimmed;
+      return extractSummaryText(trimmed);
     }
     return "No updates yet.";
   })();
@@ -394,7 +399,7 @@ export const AgentTile = ({
   const showTranscript =
     tile.outputLines.length > 0 || Boolean(tile.streamText) || showThinking;
   const avatarSeed = tile.avatarSeed ?? tile.agentId;
-  const panelBorder = "border-slate-200";
+  const panelBorder = "border-border";
 
   const loadWorkspaceFiles = useCallback(async () => {
     if (!projectId) return;
@@ -594,25 +599,25 @@ export const AgentTile = ({
     settingsOpen && typeof document !== "undefined"
       ? createPortal(
           <div
-            className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 px-6 py-8 backdrop-blur-sm"
+            className="fixed inset-0 z-50 flex items-center justify-center bg-foreground/20 px-6 py-8 backdrop-blur-sm"
             role="dialog"
             aria-modal="true"
             aria-label="Agent settings"
             onClick={() => setSettingsOpen(false)}
           >
             <div
-              className="w-[min(92vw,920px)] max-h-[90vh] overflow-hidden rounded-[32px] border border-slate-200 bg-white/95 p-6 shadow-2xl"
+              className="w-[min(92vw,920px)] max-h-[90vh] overflow-hidden rounded-lg border border-border bg-popover p-6 shadow-lg"
               onClick={(event) => event.stopPropagation()}
             >
               <div className="flex max-h-[calc(90vh-3rem)] flex-col gap-4 overflow-hidden">
                 <div className="flex items-start justify-between gap-4">
                   <div>
-                    <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                       Agent settings
                     </div>
-                    <div className="mt-3 flex items-center gap-2 rounded-full border border-slate-200 bg-white/90 px-3 py-1 shadow-sm">
+                    <div className="mt-3 flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-1 shadow-sm">
                       <input
-                        className="w-full bg-transparent text-sm font-semibold uppercase tracking-wide text-slate-700 outline-none"
+                        className="w-full bg-transparent text-sm font-semibold uppercase tracking-wide text-foreground outline-none"
                         value={nameDraft}
                         onChange={(event) => setNameDraft(event.target.value)}
                         onBlur={() => {
@@ -629,7 +634,7 @@ export const AgentTile = ({
                         }}
                       />
                       <button
-                        className="flex h-6 w-6 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 hover:bg-white"
+                        className="flex h-6 w-6 items-center justify-center rounded-md border border-border bg-card text-muted-foreground hover:bg-card"
                         type="button"
                         aria-label="Shuffle name"
                         onClick={(event) => {
@@ -643,7 +648,7 @@ export const AgentTile = ({
                     </div>
                   </div>
                   <button
-                    className="rounded-full border border-slate-200 px-4 py-2 text-xs font-semibold uppercase text-slate-600"
+                    className="rounded-lg border border-border px-4 py-2 text-xs font-semibold uppercase text-muted-foreground"
                     type="button"
                     onClick={() => setSettingsOpen(false)}
                   >
@@ -652,12 +657,12 @@ export const AgentTile = ({
                 </div>
 
                 <div className="flex flex-1 flex-col gap-4 overflow-auto pr-1">
-                  <div className="rounded-3xl border border-slate-200 bg-white/80 p-4">
+                  <div className="rounded-lg border border-border bg-card p-4">
                     <div className="grid gap-3 md:grid-cols-[1.2fr_1fr]">
-                      <label className="flex flex-col gap-2 text-xs font-semibold uppercase text-slate-500">
+                      <label className="flex flex-col gap-2 text-xs font-semibold uppercase text-muted-foreground">
                         <span>Model</span>
                         <select
-                          className="h-10 rounded-2xl border border-slate-200 bg-white/80 px-3 text-xs font-semibold text-slate-700"
+                          className="h-10 rounded-lg border border-border bg-card px-3 text-xs font-semibold text-foreground"
                           value={tile.model ?? ""}
                           onChange={(event) => {
                             const value = event.target.value.trim();
@@ -675,10 +680,10 @@ export const AgentTile = ({
                         </select>
                       </label>
                       {allowThinking ? (
-                        <label className="flex flex-col gap-2 text-xs font-semibold uppercase text-slate-500">
+                        <label className="flex flex-col gap-2 text-xs font-semibold uppercase text-muted-foreground">
                           <span>Thinking</span>
                           <select
-                            className="h-10 rounded-2xl border border-slate-200 bg-white/80 px-3 text-xs font-semibold text-slate-700"
+                            className="h-10 rounded-lg border border-border bg-card px-3 text-xs font-semibold text-foreground"
                             value={tile.thinkingLevel ?? ""}
                             onChange={(event) => {
                               const value = event.target.value.trim();
@@ -699,19 +704,19 @@ export const AgentTile = ({
                       )}
                     </div>
                     <button
-                      className="mt-4 w-full max-w-xs self-center rounded-full border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-semibold uppercase text-rose-600"
+                      className="mt-4 w-full max-w-xs self-center rounded-lg border border-destructive bg-destructive px-3 py-2 text-xs font-semibold uppercase text-destructive-foreground"
                       type="button"
                       onClick={onDelete}
                     >
                       {tile.archivedAt ? "Restore agent" : "Archive agent"}
                     </button>
                   </div>
-                  <div className="flex min-h-[420px] flex-1 flex-col rounded-3xl border border-slate-200 bg-white/80 p-4">
+                  <div className="flex min-h-[420px] flex-1 flex-col rounded-lg border border-border bg-card p-4">
                     <div className="flex flex-wrap items-center justify-between gap-2">
-                      <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                      <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                         Workspace files
                       </div>
-                      <div className="text-[11px] font-semibold uppercase text-slate-400">
+                      <div className="text-[11px] font-semibold uppercase text-muted-foreground">
                         {workspaceLoading
                           ? "Loading..."
                           : workspaceDirty
@@ -720,7 +725,7 @@ export const AgentTile = ({
                       </div>
                     </div>
                     {workspaceError ? (
-                      <div className="mt-3 rounded-2xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-600">
+                      <div className="mt-3 rounded-lg border border-destructive bg-destructive px-3 py-2 text-xs text-destructive-foreground">
                         {workspaceError}
                       </div>
                     ) : null}
@@ -732,10 +737,10 @@ export const AgentTile = ({
                           <button
                             key={name}
                             type="button"
-                            className={`rounded-t-2xl border px-3 py-2 text-[11px] font-semibold uppercase tracking-wide transition ${
+                            className={`rounded-t-lg border px-3 py-2 text-[11px] font-semibold uppercase tracking-wide transition ${
                               active
-                                ? "border-slate-200 bg-white text-slate-900 shadow-sm"
-                                : "border-transparent bg-slate-100/60 text-slate-500 hover:bg-white"
+                                ? "border-border bg-card text-foreground shadow-sm"
+                                : "border-transparent bg-muted text-muted-foreground hover:bg-card"
                             }`}
                             onClick={() => handleWorkspaceTabChange(name)}
                           >
@@ -744,25 +749,25 @@ export const AgentTile = ({
                         );
                       })}
                     </div>
-                    <div className="mt-3 flex-1 overflow-auto rounded-2xl border border-slate-200 bg-white/90 p-4">
+                    <div className="mt-3 flex-1 overflow-auto rounded-lg border border-border bg-card p-4">
                       <div className="flex items-start justify-between gap-3">
                         <div>
-                          <div className="text-sm font-semibold text-slate-800">
+                          <div className="text-sm font-semibold text-foreground">
                             {WORKSPACE_FILE_META[workspaceTab].title}
                           </div>
-                          <div className="text-xs text-slate-500">
+                          <div className="text-xs text-muted-foreground">
                             {WORKSPACE_FILE_META[workspaceTab].hint}
                           </div>
                         </div>
                         {!workspaceFiles[workspaceTab].exists ? (
-                          <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-1 text-[10px] font-semibold uppercase text-amber-700">
+                          <span className="rounded-md border border-border bg-accent px-2 py-1 text-[10px] font-semibold uppercase text-accent-foreground">
                             new
                           </span>
                         ) : null}
                       </div>
 
                       <textarea
-                        className="mt-4 min-h-[220px] w-full resize-y rounded-2xl border border-slate-200 bg-white/80 px-3 py-2 text-xs text-slate-800 outline-none"
+                        className="mt-4 min-h-[220px] w-full resize-y rounded-lg border border-border bg-card px-3 py-2 text-xs text-foreground outline-none"
                         value={workspaceFiles[workspaceTab].content}
                         placeholder={
                           workspaceFiles[workspaceTab].content.trim().length === 0
@@ -781,12 +786,12 @@ export const AgentTile = ({
                       />
 
                       {workspaceTab === "HEARTBEAT.md" ? (
-                        <div className="mt-4 rounded-2xl border border-slate-200 bg-white/80 p-4">
+                        <div className="mt-4 rounded-lg border border-border bg-card p-4">
                           <div className="flex flex-wrap items-center justify-between gap-2">
-                            <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                            <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                               Heartbeat config
                             </div>
-                            <div className="text-[11px] font-semibold uppercase text-slate-400">
+                            <div className="text-[11px] font-semibold uppercase text-muted-foreground">
                               {heartbeatLoading
                                 ? "Loading..."
                                 : heartbeatDirty
@@ -795,15 +800,15 @@ export const AgentTile = ({
                             </div>
                           </div>
                           {heartbeatError ? (
-                            <div className="mt-3 rounded-2xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-600">
+                            <div className="mt-3 rounded-lg border border-destructive bg-destructive px-3 py-2 text-xs text-destructive-foreground">
                               {heartbeatError}
                             </div>
                           ) : null}
-                          <label className="mt-4 flex items-center justify-between gap-3 text-xs font-semibold uppercase text-slate-500">
+                          <label className="mt-4 flex items-center justify-between gap-3 text-xs font-semibold uppercase text-muted-foreground">
                             <span>Override defaults</span>
                             <input
                               type="checkbox"
-                              className="h-4 w-4 rounded border-slate-300 text-slate-900"
+                              className="h-4 w-4 rounded border-input text-foreground"
                               checked={heartbeatOverride}
                               disabled={heartbeatLoading || heartbeatSaving}
                               onChange={(event) => {
@@ -812,11 +817,11 @@ export const AgentTile = ({
                               }}
                             />
                           </label>
-                          <label className="mt-4 flex items-center justify-between gap-3 text-xs font-semibold uppercase text-slate-500">
+                          <label className="mt-4 flex items-center justify-between gap-3 text-xs font-semibold uppercase text-muted-foreground">
                             <span>Enabled</span>
                             <input
                               type="checkbox"
-                              className="h-4 w-4 rounded border-slate-300 text-slate-900"
+                              className="h-4 w-4 rounded border-input text-foreground"
                               checked={heartbeatEnabled}
                               disabled={heartbeatLoading || heartbeatSaving}
                               onChange={(event) => {
@@ -826,10 +831,10 @@ export const AgentTile = ({
                               }}
                             />
                           </label>
-                          <label className="mt-4 flex flex-col gap-2 text-xs font-semibold uppercase text-slate-500">
+                          <label className="mt-4 flex flex-col gap-2 text-xs font-semibold uppercase text-muted-foreground">
                             <span>Interval</span>
                             <select
-                              className="h-10 rounded-2xl border border-slate-200 bg-white/80 px-3 text-xs font-semibold text-slate-700"
+                              className="h-10 rounded-lg border border-border bg-card px-3 text-xs font-semibold text-foreground"
                               value={heartbeatIntervalMode === "custom" ? "custom" : heartbeatEvery}
                               disabled={heartbeatLoading || heartbeatSaving}
                               onChange={(event) => {
@@ -856,7 +861,7 @@ export const AgentTile = ({
                             <input
                               type="number"
                               min={1}
-                              className="mt-2 h-10 w-full rounded-2xl border border-slate-200 bg-white/80 px-3 text-xs text-slate-700 outline-none"
+                              className="mt-2 h-10 w-full rounded-lg border border-border bg-card px-3 text-xs text-foreground outline-none"
                               value={heartbeatCustomMinutes}
                               disabled={heartbeatLoading || heartbeatSaving}
                               onChange={(event) => {
@@ -867,10 +872,10 @@ export const AgentTile = ({
                               placeholder="Minutes"
                             />
                           ) : null}
-                          <label className="mt-4 flex flex-col gap-2 text-xs font-semibold uppercase text-slate-500">
+                          <label className="mt-4 flex flex-col gap-2 text-xs font-semibold uppercase text-muted-foreground">
                             <span>Target</span>
                             <select
-                              className="h-10 rounded-2xl border border-slate-200 bg-white/80 px-3 text-xs font-semibold text-slate-700"
+                              className="h-10 rounded-lg border border-border bg-card px-3 text-xs font-semibold text-foreground"
                               value={heartbeatTargetMode}
                               disabled={heartbeatLoading || heartbeatSaving}
                               onChange={(event) => {
@@ -888,7 +893,7 @@ export const AgentTile = ({
                           </label>
                           {heartbeatTargetMode === "custom" ? (
                             <input
-                              className="mt-2 h-10 w-full rounded-2xl border border-slate-200 bg-white/80 px-3 text-xs text-slate-700 outline-none"
+                              className="mt-2 h-10 w-full rounded-lg border border-border bg-card px-3 text-xs text-foreground outline-none"
                               value={heartbeatTargetCustom}
                               disabled={heartbeatLoading || heartbeatSaving}
                               onChange={(event) => {
@@ -899,11 +904,11 @@ export const AgentTile = ({
                               placeholder="Channel id (e.g., whatsapp)"
                             />
                           ) : null}
-                          <label className="mt-4 flex items-center justify-between gap-3 text-xs font-semibold uppercase text-slate-500">
+                          <label className="mt-4 flex items-center justify-between gap-3 text-xs font-semibold uppercase text-muted-foreground">
                             <span>Include reasoning</span>
                             <input
                               type="checkbox"
-                              className="h-4 w-4 rounded border-slate-300 text-slate-900"
+                              className="h-4 w-4 rounded border-input text-foreground"
                               checked={heartbeatIncludeReasoning}
                               disabled={heartbeatLoading || heartbeatSaving}
                               onChange={(event) => {
@@ -913,11 +918,11 @@ export const AgentTile = ({
                               }}
                             />
                           </label>
-                          <label className="mt-4 flex items-center justify-between gap-3 text-xs font-semibold uppercase text-slate-500">
+                          <label className="mt-4 flex items-center justify-between gap-3 text-xs font-semibold uppercase text-muted-foreground">
                             <span>Active hours</span>
                             <input
                               type="checkbox"
-                              className="h-4 w-4 rounded border-slate-300 text-slate-900"
+                              className="h-4 w-4 rounded border-input text-foreground"
                               checked={heartbeatActiveHoursEnabled}
                               disabled={heartbeatLoading || heartbeatSaving}
                               onChange={(event) => {
@@ -931,7 +936,7 @@ export const AgentTile = ({
                             <div className="mt-2 grid gap-2 sm:grid-cols-2">
                               <input
                                 type="time"
-                                className="h-10 w-full rounded-2xl border border-slate-200 bg-white/80 px-3 text-xs text-slate-700 outline-none"
+                                className="h-10 w-full rounded-lg border border-border bg-card px-3 text-xs text-foreground outline-none"
                                 value={heartbeatActiveStart}
                                 disabled={heartbeatLoading || heartbeatSaving}
                                 onChange={(event) => {
@@ -942,7 +947,7 @@ export const AgentTile = ({
                               />
                               <input
                                 type="time"
-                                className="h-10 w-full rounded-2xl border border-slate-200 bg-white/80 px-3 text-xs text-slate-700 outline-none"
+                                className="h-10 w-full rounded-lg border border-border bg-card px-3 text-xs text-foreground outline-none"
                                 value={heartbeatActiveEnd}
                                 disabled={heartbeatLoading || heartbeatSaving}
                                 onChange={(event) => {
@@ -953,12 +958,12 @@ export const AgentTile = ({
                               />
                             </div>
                           ) : null}
-                          <label className="mt-4 flex flex-col gap-2 text-xs font-semibold uppercase text-slate-500">
+                          <label className="mt-4 flex flex-col gap-2 text-xs font-semibold uppercase text-muted-foreground">
                             <span>ACK max chars</span>
                             <input
                               type="number"
                               min={0}
-                              className="h-10 w-full rounded-2xl border border-slate-200 bg-white/80 px-3 text-xs text-slate-700 outline-none"
+                              className="h-10 w-full rounded-lg border border-border bg-card px-3 text-xs text-foreground outline-none"
                               value={heartbeatAckMaxChars}
                               disabled={heartbeatLoading || heartbeatSaving}
                               onChange={(event) => {
@@ -969,11 +974,11 @@ export const AgentTile = ({
                             />
                           </label>
                           <div className="mt-4 flex items-center justify-between gap-2">
-                            <div className="text-xs text-slate-400">
+                            <div className="text-xs text-muted-foreground">
                               {heartbeatDirty ? "Remember to save changes." : "Up to date."}
                             </div>
                             <button
-                              className="rounded-full bg-slate-900 px-4 py-2 text-xs font-semibold uppercase text-white disabled:cursor-not-allowed disabled:bg-slate-400"
+                              className="rounded-lg bg-primary px-4 py-2 text-xs font-semibold uppercase text-primary-foreground disabled:cursor-not-allowed disabled:bg-muted"
                               type="button"
                               disabled={
                                 !projectId ||
@@ -990,12 +995,12 @@ export const AgentTile = ({
                       ) : null}
 
                     </div>
-                    <div className="mt-4 flex items-center justify-between gap-2 border-t border-slate-200 pt-4">
-                      <div className="text-xs text-slate-400">
+                    <div className="mt-4 flex items-center justify-between gap-2 border-t border-border pt-4">
+                      <div className="text-xs text-muted-foreground">
                         {workspaceDirty ? "Auto-save on tab switch." : "Up to date."}
                       </div>
                       <button
-                        className="rounded-full border border-slate-200 px-4 py-2 text-xs font-semibold uppercase text-slate-600"
+                        className="rounded-lg border border-border px-4 py-2 text-xs font-semibold uppercase text-muted-foreground"
                         type="button"
                         onClick={() => setSettingsOpen(false)}
                       >
@@ -1024,12 +1029,12 @@ export const AgentTile = ({
         <div className="flex items-start justify-between gap-2">
           <div className="flex flex-1 flex-col items-center gap-2">
             <div
-              className={`flex items-center gap-2 rounded-full border bg-white/90 px-3 py-1 shadow-sm ${
-                isSelected ? "agent-name-selected" : "border-slate-200"
+              className={`flex items-center gap-2 rounded-lg border bg-card px-3 py-1 shadow-sm ${
+                isSelected ? "agent-name-selected" : "border-border"
               }`}
             >
               <input
-                className="w-full bg-transparent text-center text-xs font-semibold uppercase tracking-wide text-slate-700 outline-none"
+                className="w-full bg-transparent text-center text-xs font-semibold uppercase tracking-wide text-foreground outline-none"
                 value={nameDraft}
                 onChange={(event) => setNameDraft(event.target.value)}
                 onBlur={() => {
@@ -1046,7 +1051,7 @@ export const AgentTile = ({
                 }}
               />
               <button
-                className="nodrag flex h-6 w-6 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 hover:bg-white"
+                className="nodrag flex h-6 w-6 items-center justify-center rounded-md border border-border bg-card text-muted-foreground hover:bg-card"
                 type="button"
                 aria-label="Shuffle name"
                 data-testid="agent-name-shuffle"
@@ -1069,7 +1074,7 @@ export const AgentTile = ({
                 />
               </div>
               <button
-                className="nodrag absolute -bottom-2 -right-2 flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 shadow-md hover:bg-white"
+                className="nodrag absolute -bottom-2 -right-2 flex h-8 w-8 items-center justify-center rounded-md border border-border bg-card text-muted-foreground shadow-sm hover:bg-card"
                 type="button"
                 aria-label="Shuffle avatar"
                 data-testid="agent-avatar-shuffle"
@@ -1084,30 +1089,30 @@ export const AgentTile = ({
             </div>
           </div>
         </div>
-        <div className="rounded-2xl border border-slate-200 bg-white/80 px-3 py-2">
-          <div className="flex items-center justify-between text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+        <div className="rounded-lg border border-border bg-card px-3 py-2">
+          <div className="flex items-center justify-between text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
             <span>Latest update</span>
             <span
-              className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${statusColor}`}
+              className={`rounded-md px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${statusColor}`}
             >
               {statusLabel}
             </span>
           </div>
-          <div className="mt-2 max-h-28 overflow-auto text-xs text-slate-700">
+          <div className="mt-2 max-h-28 overflow-auto text-xs text-foreground">
             {latestUpdate}
           </div>
           {lastUserMessage ? (
-            <div className="mt-2 border-t border-slate-200 pt-2 text-[11px] text-slate-500">
-              <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+            <div className="mt-2 border-t border-border pt-2 text-[11px] text-muted-foreground">
+              <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
                 Last message
               </span>
-              <div className="mt-1 text-xs text-slate-700">{lastUserMessage}</div>
+              <div className="mt-1 text-xs text-foreground">{lastUserMessage}</div>
             </div>
           ) : null}
           {tile.outputLines.length === 0 && !tile.streamText ? (
             <div className="mt-2">
               <button
-                className="nodrag rounded-full border border-slate-200 px-3 py-1 text-[11px] font-semibold text-slate-600 hover:bg-white"
+                className="nodrag rounded-lg border border-border px-3 py-1 text-[11px] font-semibold text-muted-foreground hover:bg-card"
                 type="button"
                 onClick={(event) => {
                   event.preventDefault();
@@ -1123,7 +1128,7 @@ export const AgentTile = ({
         <div className="mt-2 flex items-end gap-2">
           <div className="relative">
             <button
-              className="nodrag flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-white/80 text-slate-600 hover:bg-white"
+              className="nodrag flex h-8 w-8 items-center justify-center rounded-md border border-border bg-card text-muted-foreground hover:bg-card"
               type="button"
               data-testid="agent-options-toggle"
               aria-label="Agent options"
@@ -1143,7 +1148,7 @@ export const AgentTile = ({
           <textarea
             ref={draftRef}
             rows={1}
-            className="max-h-28 flex-1 resize-none rounded-2xl border border-slate-200 bg-white/80 px-3 py-2 text-[11px] text-slate-900 outline-none"
+            className="max-h-28 flex-1 resize-none rounded-lg border border-border bg-card px-3 py-2 text-[11px] text-foreground outline-none"
             value={tile.draft}
             onChange={(event) => {
               onDraftChange(event.target.value);
@@ -1160,7 +1165,7 @@ export const AgentTile = ({
             placeholder="type a message"
           />
           <button
-            className="rounded-full bg-slate-900 px-3 py-2 text-[11px] font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-400"
+            className="rounded-lg border border-transparent bg-primary px-3 py-2 text-[11px] font-semibold text-primary-foreground shadow-sm transition hover:brightness-105 disabled:cursor-not-allowed disabled:border-border disabled:bg-muted disabled:text-muted-foreground disabled:shadow-none"
             type="button"
             onClick={() => onSend(tile.draft)}
             disabled={!canSend || tile.status === "running" || !tile.draft.trim()}
@@ -1172,17 +1177,17 @@ export const AgentTile = ({
 
       {showTranscript ? (
         <div
-          className={`flex min-h-0 flex-1 flex-col overflow-hidden rounded-3xl border ${panelBorder} bg-white/80 px-4 pb-4 pt-4 shadow-xl backdrop-blur`}
+          className={`flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border ${panelBorder} bg-card px-4 pb-4 pt-4 shadow-sm`}
         >
           <div
             ref={outputRef}
-            className="nowheel flex-1 overflow-auto rounded-2xl border border-slate-200 bg-white/60 p-3 text-xs text-slate-700"
+            className="nowheel flex-1 overflow-auto rounded-lg border border-border bg-muted p-3 text-xs text-foreground"
             onWheel={handleOutputWheel}
             data-testid="agent-transcript"
           >
             <div className="flex flex-col gap-2">
               {showThinking ? (
-                <div className="rounded-xl border border-amber-200 bg-amber-50 px-2 py-1 text-[11px] font-medium text-amber-800">
+                <div className="rounded-lg border border-border bg-accent px-2 py-1 text-[11px] font-medium text-accent-foreground">
                   <div className="agent-markdown">
                     <ReactMarkdown remarkPlugins={[remarkGfm]}>
                       {tile.thinkingTrace}
@@ -1207,12 +1212,12 @@ export const AgentTile = ({
                     nodes.push(
                       <details
                         key={`${tile.id}-trace-${index}`}
-                        className="rounded-xl border border-slate-200 bg-white/80 px-2 py-1 text-[11px] text-slate-600"
+                        className="rounded-lg border border-border bg-card px-2 py-1 text-[11px] text-muted-foreground"
                       >
                         <summary className="cursor-pointer select-none font-semibold">
                           Thinking
                         </summary>
-                        <div className="agent-markdown mt-1 text-slate-700">
+                        <div className="agent-markdown mt-1 text-foreground">
                           <ReactMarkdown remarkPlugins={[remarkGfm]}>
                             {traces.join("\n")}
                           </ReactMarkdown>
@@ -1231,7 +1236,7 @@ export const AgentTile = ({
                 return nodes;
               })()}
               {tile.streamText ? (
-                <div className="agent-markdown text-slate-500">
+                <div className="agent-markdown text-muted-foreground">
                   <ReactMarkdown remarkPlugins={[remarkGfm]}>
                     {tile.streamText}
                   </ReactMarkdown>
@@ -1247,7 +1252,7 @@ export const AgentTile = ({
         className={`nodrag absolute -bottom-2 left-6 right-6 flex h-4 cursor-row-resize touch-none items-center justify-center transition-opacity ${resizeHandleClass}`}
         onPointerDown={startHeightResize}
       >
-        <span className="h-1.5 w-16 rounded-full bg-slate-300/90 shadow-sm" />
+        <span className="h-1.5 w-16 rounded-full bg-border shadow-sm" />
       </button>
       <button
         type="button"
@@ -1255,7 +1260,7 @@ export const AgentTile = ({
         className={`nodrag absolute -right-2 top-6 bottom-6 flex w-4 cursor-col-resize touch-none items-center justify-center transition-opacity ${resizeHandleClass}`}
         onPointerDown={startWidthResize}
       >
-        <span className="h-16 w-1.5 rounded-full bg-slate-300/90 shadow-sm" />
+        <span className="h-16 w-1.5 rounded-full bg-border shadow-sm" />
       </button>
     </div>
   );

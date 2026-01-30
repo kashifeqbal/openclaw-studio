@@ -354,7 +354,11 @@ export const AgentCanvasProvider = ({ children }: { children: ReactNode }) => {
     async (projectId: string, name: string, role: ProjectTile["role"]) => {
       try {
         const result = await apiCreateProjectTile(projectId, { name, role });
-        dispatch({ type: "loadStore", store: result.store });
+        dispatch({
+          type: "addTile",
+          projectId,
+          tile: createRuntimeTile(result.tile),
+        });
         return { tile: result.tile, warnings: result.warnings };
       } catch (err) {
         const message = err instanceof Error ? err.message : "Failed to create tile.";

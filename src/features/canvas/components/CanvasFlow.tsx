@@ -255,7 +255,13 @@ const CanvasFlowInner = ({
         zoom: transform.zoom,
       }}
     >
-      <Background />
+      <Background
+        color="var(--border)"
+        gap={24}
+        size={1}
+        variant="dots"
+        className="opacity-60"
+      />
       <MiniMap />
       <Controls />
     </ReactFlow>

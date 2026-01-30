@@ -8,6 +8,7 @@ import { MAX_TILE_HEIGHT, MIN_TILE_SIZE } from "@/lib/canvasTileDefaults";
 import { screenToWorld, worldToScreen } from "@/features/canvas/lib/transform";
 import { extractText } from "@/lib/text/extractText";
 import { extractThinking, formatThinkingMarkdown } from "@/lib/text/extractThinking";
+import { extractSummaryText } from "@/lib/text/summary";
 import { isHeartbeatPrompt, isUiMetadataPrefix, stripUiMetadata } from "@/lib/text/uiMetadata";
 import { useGatewayConnection } from "@/lib/gateway/useGatewayConnection";
 import type { EventFrame } from "@/lib/gateway/frames";
@@ -483,7 +484,8 @@ const AgentCanvasPage = () => {
               .reverse()
               .find((item) => item.role === "user");
             if (lastAssistant?.text) {
-              patch.latestPreview = stripUiMetadata(lastAssistant.text);
+              const cleaned = stripUiMetadata(lastAssistant.text);
+              patch.latestPreview = extractSummaryText(cleaned);
             }
             if (lastUser?.text) {
               patch.lastUserMessage = stripUiMetadata(lastUser.text);
@@ -832,6 +834,8 @@ const AgentCanvasPage = () => {
       }
       const nextTextRaw = extractText(payload.message);
       const nextText = nextTextRaw ? stripUiMetadata(nextTextRaw) : null;
+      const summaryText =
+        typeof nextText === "string" ? extractSummaryText(nextText) : null;
       const nextThinking = extractThinking(payload.message);
       if (payload.state === "delta") {
         if (typeof nextTextRaw === "string" && isUiMetadataPrefix(nextTextRaw.trim())) {
@@ -884,7 +888,7 @@ const AgentCanvasPage = () => {
             type: "updateTile",
             projectId: match.projectId,
             tileId: match.tileId,
-            patch: { lastResult: nextText },
+            patch: { lastResult: summaryText || nextText },
           });
         }
         dispatch({
@@ -1228,7 +1232,9 @@ const AgentCanvasPage = () => {
 
         {state.loading ? (
           <div className="pointer-events-auto mx-auto w-full max-w-4xl">
-            <div className="glass-panel px-6 py-6 text-slate-700">Loading workspaces…</div>
+            <div className="glass-panel px-6 py-6 text-muted-foreground">
+              Loading workspaces…
+            </div>
           </div>
         ) : null}
 
@@ -1237,10 +1243,10 @@ const AgentCanvasPage = () => {
             <div className="glass-panel px-6 py-6">
               <div className="flex flex-col gap-4">
                 <div className="grid gap-4">
-                  <label className="flex flex-col gap-1 text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
+                  <label className="flex flex-col gap-1 text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
                     Workspace name
                     <input
-                      className="h-11 rounded-full border border-slate-300 bg-white/80 px-4 text-sm text-slate-900 outline-none"
+                      className="h-11 rounded-lg border border-input bg-background px-4 text-sm text-foreground outline-none"
                       value={projectName}
                       onChange={(event) => setProjectName(event.target.value)}
                     />
@@ -1248,14 +1254,14 @@ const AgentCanvasPage = () => {
                 </div>
                 <div className="flex flex-wrap items-center gap-3">
                   <button
-                    className="rounded-full bg-[var(--accent)] px-5 py-2 text-sm font-semibold text-white"
+                    className="rounded-lg bg-primary px-5 py-2 text-sm font-semibold text-primary-foreground"
                     type="button"
                     onClick={handleProjectCreate}
                   >
                     Create Workspace
                   </button>
                   <button
-                    className="rounded-full border border-slate-300 px-5 py-2 text-sm font-semibold text-slate-700"
+                    className="rounded-lg border border-input px-5 py-2 text-sm font-semibold text-foreground"
                     type="button"
                     onClick={() => setShowProjectForm(false)}
                   >
@@ -1263,7 +1269,7 @@ const AgentCanvasPage = () => {
                   </button>
                 </div>
                 {projectWarnings.length > 0 ? (
-                  <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-700">
+                  <div className="rounded-lg border border-border bg-accent px-4 py-2 text-sm text-accent-foreground">
                     {projectWarnings.join(" ")}
                   </div>
                 ) : null}
@@ -1277,10 +1283,10 @@ const AgentCanvasPage = () => {
             <div className="glass-panel px-6 py-6">
               <div className="flex flex-col gap-4">
                 <div className="grid gap-4">
-                  <label className="flex flex-col gap-1 text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
+                  <label className="flex flex-col gap-1 text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
                     Workspace path
                     <input
-                      className="h-11 rounded-full border border-slate-300 bg-white/80 px-4 text-sm text-slate-900 outline-none"
+                      className="h-11 rounded-lg border border-input bg-background px-4 text-sm text-foreground outline-none"
                       value={projectPath}
                       onChange={(event) => setProjectPath(event.target.value)}
                       placeholder="/Users/you/repos/my-workspace"
@@ -1289,14 +1295,14 @@ const AgentCanvasPage = () => {
                 </div>
                 <div className="flex flex-wrap items-center gap-3">
                   <button
-                    className="rounded-full bg-[var(--accent)] px-5 py-2 text-sm font-semibold text-white"
+                    className="rounded-lg bg-primary px-5 py-2 text-sm font-semibold text-primary-foreground"
                     type="button"
                     onClick={handleProjectOpen}
                   >
                     Open Workspace
                   </button>
                   <button
-                    className="rounded-full border border-slate-300 px-5 py-2 text-sm font-semibold text-slate-700"
+                    className="rounded-lg border border-input px-5 py-2 text-sm font-semibold text-foreground"
                     type="button"
                     onClick={() => setShowOpenProjectForm(false)}
                   >
@@ -1304,7 +1310,7 @@ const AgentCanvasPage = () => {
                   </button>
                 </div>
                 {openProjectWarnings.length > 0 ? (
-                  <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-700">
+                  <div className="rounded-lg border border-border bg-accent px-4 py-2 text-sm text-accent-foreground">
                     {openProjectWarnings.join(" ")}
                   </div>
                 ) : null}
@@ -1315,7 +1321,7 @@ const AgentCanvasPage = () => {
 
         {errorMessage ? (
           <div className="pointer-events-auto mx-auto w-full max-w-4xl">
-            <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-2 text-sm text-rose-700">
+            <div className="rounded-lg border border-destructive bg-destructive px-4 py-2 text-sm text-destructive-foreground">
               {errorMessage}
             </div>
           </div>
@@ -1323,7 +1329,7 @@ const AgentCanvasPage = () => {
 
         {project ? null : (
           <div className="pointer-events-auto mx-auto w-full max-w-4xl">
-            <div className="glass-panel px-6 py-8 text-slate-600">
+            <div className="glass-panel px-6 py-8 text-muted-foreground">
               Create a workspace to begin.
             </div>
           </div>

@@ -2,10 +2,10 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-const LEGACY_STATE_DIRNAMES = [".clawdbot", ".moltbot", ".moldbot"] as const;
+const LEGACY_STATE_DIRNAMES = [".clawdbot", ".moltbot"] as const;
 const NEW_STATE_DIRNAME = ".openclaw";
 const CONFIG_FILENAME = "openclaw.json";
-const LEGACY_CONFIG_FILENAMES = ["clawdbot.json", "moltbot.json", "moldbot.json"] as const;
+const LEGACY_CONFIG_FILENAMES = ["clawdbot.json", "moltbot.json"] as const;
 
 export const resolveUserPath = (
   input: string,

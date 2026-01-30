@@ -48,3 +48,8 @@ test-results
 
 # agent state
 /.agent
+/.openclaw
+/.clawdbot
+/.moltbot
+/agent-canvas
+/worktrees
