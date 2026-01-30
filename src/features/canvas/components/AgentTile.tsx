@@ -321,6 +321,24 @@ export const AgentTile = ({
       : tile.status === "error"
         ? "bg-rose-200 text-rose-900"
         : "bg-amber-200 text-amber-900";
+  const statusLabel =
+    tile.status === "running" ? "Running" : tile.status === "error" ? "Error" : "Idle";
+  const latestPreview = (() => {
+    const streamText = tile.streamText?.trim();
+    if (tile.status === "running" && streamText) return streamText;
+    const lastResult = tile.lastResult?.trim();
+    if (lastResult) return lastResult;
+    for (let index = tile.outputLines.length - 1; index >= 0; index -= 1) {
+      const line = tile.outputLines[index];
+      if (!line) continue;
+      const trimmed = line.trim();
+      if (!trimmed) continue;
+      if (isTraceMarkdown(trimmed)) continue;
+      if (trimmed.startsWith(">")) continue;
+      return trimmed;
+    }
+    return "No updates yet.";
+  })();
   const modelOptions = models.map((entry) => ({
     value: `${entry.provider}/${entry.id}`,
     label:
@@ -1016,13 +1034,6 @@ export const AgentTile = ({
                   isSelected={isSelected}
                 />
               </div>
-              <div className="pointer-events-none absolute -bottom-3 left-1/2 -translate-x-1/2">
-                <span
-                  className={`rounded-full px-2 py-1 text-[10px] font-semibold uppercase tracking-wide ${statusColor}`}
-                >
-                  {tile.status}
-                </span>
-              </div>
               <button
                 className="nodrag absolute -bottom-2 -right-2 flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 shadow-md hover:bg-white"
                 type="button"
@@ -1039,10 +1050,26 @@ export const AgentTile = ({
             </div>
           </div>
         </div>
+        <div className="rounded-2xl border border-slate-200 bg-white/80 px-3 py-2">
+          <div className="flex items-center justify-between text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+            <span>Status</span>
+            <span
+              className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${statusColor}`}
+            >
+              {statusLabel}
+            </span>
+          </div>
+          <div className="mt-2 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+            Latest update
+          </div>
+          <div className="agent-summary-clamp text-xs text-slate-700">
+            {latestPreview}
+          </div>
+        </div>
         <div className="mt-2 flex items-end gap-2">
           <div className="relative">
             <button
-              className="nodrag flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-white/80 text-slate-600 hover:bg-white"
+              className="nodrag flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-white/80 text-slate-600 hover:bg-white"
               type="button"
               data-testid="agent-options-toggle"
               aria-label="Agent options"
@@ -1062,7 +1089,7 @@ export const AgentTile = ({
           <textarea
             ref={draftRef}
             rows={1}
-            className="max-h-32 flex-1 resize-none rounded-2xl border border-slate-200 bg-white/90 px-3 py-2 text-xs text-slate-900 outline-none"
+            className="max-h-28 flex-1 resize-none rounded-2xl border border-slate-200 bg-white/80 px-3 py-2 text-[11px] text-slate-900 outline-none"
             value={tile.draft}
             onChange={(event) => {
               onDraftChange(event.target.value);
@@ -1079,7 +1106,7 @@ export const AgentTile = ({
             placeholder="type a message"
           />
           <button
-            className="rounded-full bg-slate-900 px-3 py-2 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-400"
+            className="rounded-full bg-slate-900 px-3 py-2 text-[11px] font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-400"
             type="button"
             onClick={() => onSend(tile.draft)}
             disabled={!canSend || tile.status === "running" || !tile.draft.trim()}
