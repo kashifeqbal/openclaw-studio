@@ -4,7 +4,7 @@ import { logger } from "@/lib/logger";
 import type { ProjectTileUpdatePayload } from "@/lib/projects/types";
 import { resolveAgentWorkspaceDir } from "@/lib/projects/agentWorkspace";
 import { collectAgentIdsAndDeleteArtifacts } from "@/lib/projects/fs.server";
-import { resolveProjectTileFromParams } from "@/app/api/projects/resolveResponse";
+import { resolveProjectTileFromParams } from "@/lib/projects/resolve.server";
 import {
   removeAgentEntry,
   updateClawdbotConfig,

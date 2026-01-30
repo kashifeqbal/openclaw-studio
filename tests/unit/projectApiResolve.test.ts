@@ -6,7 +6,7 @@ import {
   resolveProjectTileOrResponse,
   resolveProjectFromParams,
   resolveProjectTileFromParams,
-} from "@/app/api/projects/resolveResponse";
+} from "@/lib/projects/resolve.server";
 
 vi.mock("@/app/api/projects/store", () => ({
   loadStore: vi.fn(),

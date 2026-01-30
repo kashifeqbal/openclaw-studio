@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { logger } from "@/lib/logger";
 import { createDiscordChannelForAgent } from "@/lib/discord/discordChannel";
 import { resolveAgentWorkspaceDir } from "@/lib/projects/agentWorkspace";
-import { resolveProjectFromParams } from "@/app/api/projects/resolveResponse";
+import { resolveProjectFromParams } from "@/lib/projects/resolve.server";
 
 export const runtime = "nodejs";
 

@@ -13,7 +13,7 @@ import type {
 } from "@/lib/projects/types";
 import { resolveAgentWorkspaceDir } from "@/lib/projects/agentWorkspace";
 import { resolveStateDir } from "@/lib/clawdbot/paths";
-import { resolveProjectFromParams } from "@/app/api/projects/resolveResponse";
+import { resolveProjectFromParams } from "@/lib/projects/resolve.server";
 import {
   updateClawdbotConfig,
   upsertAgentEntry,

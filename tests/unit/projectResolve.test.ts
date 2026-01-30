@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { Project, ProjectTile, ProjectsStore } from "@/lib/projects/types";
-import { resolveProject, resolveProjectTile } from "@/lib/projects/resolve";
+import { resolveProject, resolveProjectTile } from "@/lib/projects/resolve.server";
 
 const buildStore = (): ProjectsStore => {
   const tile: ProjectTile = {

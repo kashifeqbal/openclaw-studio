@@ -8,7 +8,7 @@ import {
   type AgentEntry,
   writeAgentList,
 } from "@/lib/clawdbot/config";
-import { resolveProjectTileFromParams } from "@/app/api/projects/resolveResponse";
+import { resolveProjectTileFromParams } from "@/lib/projects/resolve.server";
 import type {
   ProjectTileHeartbeat,
   ProjectTileHeartbeatUpdatePayload,

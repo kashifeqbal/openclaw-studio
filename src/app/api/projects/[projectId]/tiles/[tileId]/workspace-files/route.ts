@@ -9,7 +9,7 @@ import {
   readWorkspaceFiles,
   writeWorkspaceFiles,
 } from "@/lib/projects/workspaceFiles.server";
-import { resolveProjectTileFromParams } from "@/app/api/projects/resolveResponse";
+import { resolveProjectTileFromParams } from "@/lib/projects/resolve.server";
 import type { ProjectTileWorkspaceFilesUpdatePayload } from "@/lib/projects/types";
 
 export const runtime = "nodejs";

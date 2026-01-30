@@ -6,7 +6,7 @@ import {
   updateClawdbotConfig,
 } from "@/lib/clawdbot/config";
 import { collectAgentIdsAndDeleteArtifacts } from "@/lib/projects/fs.server";
-import { resolveProjectFromParams } from "@/app/api/projects/resolveResponse";
+import { resolveProjectFromParams } from "@/lib/projects/resolve.server";
 import { removeProjectFromStore, saveStore } from "../store";
 
 export const runtime = "nodejs";
