@@ -108,7 +108,7 @@ const createRuntimeTile = (tile: ProjectTile): AgentTile => ({
   size: clampTileSize(tile.size),
   sessionKey: tile.sessionKey || buildSessionKey(tile.agentId, tile.id),
   model: tile.model ?? "openai-codex/gpt-5.2-codex",
-  thinkingLevel: tile.thinkingLevel ?? "low",
+  thinkingLevel: tile.thinkingLevel ?? "medium",
   avatarSeed: tile.avatarSeed ?? tile.agentId,
   archivedAt: tile.archivedAt ?? null,
   status: "idle",

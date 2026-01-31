@@ -50,9 +50,6 @@ export const HeaderBar = ({
       <div className="grid items-center gap-4 lg:grid-cols-[minmax(0,1fr)_auto]">
         <div className="flex min-w-0 items-center gap-4">
           <div className="min-w-0">
-            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
-              Default workspace
-            </p>
             <p className="truncate text-sm font-semibold text-foreground">
               {workspaceLabel}
             </p>

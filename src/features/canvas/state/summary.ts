@@ -1,6 +1,5 @@
 import type { AgentTile } from "./store";
 import { extractText } from "@/lib/text/extractText";
-import { extractSummaryText } from "@/lib/text/summary";
 import { stripUiMetadata, isUiMetadataPrefix } from "@/lib/text/uiMetadata";
 
 export type ChatEventPayload = {
@@ -33,7 +32,6 @@ export const getChatSummaryPatch = (
     return { lastActivityAt: now };
   }
   const cleaned = typeof rawText === "string" ? stripUiMetadata(rawText) : null;
-  const summarized = cleaned ? extractSummaryText(cleaned) : null;
   const patch: Partial<AgentTile> = { lastActivityAt: now };
   if (role === "user") {
     if (cleaned) {
@@ -42,8 +40,8 @@ export const getChatSummaryPatch = (
     return patch;
   }
   if (role === "assistant") {
-    if (summarized) {
-      patch.latestPreview = summarized;
+    if (cleaned) {
+      patch.latestPreview = cleaned;
     }
     return patch;
   }

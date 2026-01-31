@@ -9,8 +9,11 @@ import { WorkspaceSettingsPanel } from "@/features/canvas/components/WorkspaceSe
 import { MAX_TILE_HEIGHT, MIN_TILE_SIZE } from "@/lib/canvasTileDefaults";
 import { screenToWorld, worldToScreen } from "@/features/canvas/lib/transform";
 import { extractText } from "@/lib/text/extractText";
-import { extractThinking, formatThinkingMarkdown } from "@/lib/text/extractThinking";
-import { extractSummaryText } from "@/lib/text/summary";
+import {
+  extractThinking,
+  formatThinkingMarkdown,
+  isTraceMarkdown,
+} from "@/lib/text/extractThinking";
 import { isHeartbeatPrompt, isUiMetadataPrefix, stripUiMetadata } from "@/lib/text/uiMetadata";
 import { useGatewayConnection } from "@/lib/gateway/useGatewayConnection";
 import type { EventFrame } from "@/lib/gateway/frames";
@@ -201,6 +204,7 @@ const AgentCanvasPage = () => {
   const [gatewayModelsError, setGatewayModelsError] = useState<string | null>(null);
   const [inspectTileId, setInspectTileId] = useState<string | null>(null);
   const [headerOffset, setHeaderOffset] = useState(0);
+  const thinkingDebugRef = useRef<Set<string>>(new Set());
   // flowInstance removed (zoom controls live in the bottom-right ReactFlow Controls).
 
   const visibleProjects = useMemo(
@@ -277,6 +281,38 @@ const AgentCanvasPage = () => {
     },
     [resolveConfiguredModelKey]
   );
+
+  const summarizeThinkingMessage = useCallback((message: unknown) => {
+    if (!message || typeof message !== "object") {
+      return { type: typeof message };
+    }
+    const record = message as Record<string, unknown>;
+    const summary: Record<string, unknown> = { keys: Object.keys(record) };
+    const content = record.content;
+    if (Array.isArray(content)) {
+      summary.contentTypes = content.map((item) => {
+        if (item && typeof item === "object") {
+          const entry = item as Record<string, unknown>;
+          return typeof entry.type === "string" ? entry.type : "object";
+        }
+        return typeof item;
+      });
+    } else if (typeof content === "string") {
+      summary.contentLength = content.length;
+    }
+    if (typeof record.text === "string") {
+      summary.textLength = record.text.length;
+    }
+    for (const key of ["analysis", "reasoning", "thinking"]) {
+      const value = record[key];
+      if (typeof value === "string") {
+        summary[`${key}Length`] = value.length;
+      } else if (value && typeof value === "object") {
+        summary[`${key}Keys`] = Object.keys(value as Record<string, unknown>);
+      }
+    }
+    return summary;
+  }, []);
 
   const computeNewTilePosition = useCallback(
     (tileSize: { width: number; height: number }) => {
@@ -520,7 +556,7 @@ const AgentCanvasPage = () => {
               .find((item) => item.role === "user");
             if (lastAssistant?.text) {
               const cleaned = stripUiMetadata(lastAssistant.text);
-              patch.latestPreview = extractSummaryText(cleaned);
+              patch.latestPreview = cleaned;
             }
             if (lastUser?.text) {
               patch.lastUserMessage = stripUiMetadata(lastUser.text);
@@ -913,9 +949,7 @@ const AgentCanvasPage = () => {
       }
       const nextTextRaw = extractText(payload.message);
       const nextText = nextTextRaw ? stripUiMetadata(nextTextRaw) : null;
-      const summaryText =
-        typeof nextText === "string" ? extractSummaryText(nextText) : null;
-      const nextThinking = extractThinking(payload.message);
+      const nextThinking = extractThinking(payload.message ?? payload);
       if (payload.state === "delta") {
         if (typeof nextTextRaw === "string" && isUiMetadataPrefix(nextTextRaw.trim())) {
           return;
@@ -946,6 +980,17 @@ const AgentCanvasPage = () => {
       }
 
       if (payload.state === "final") {
+        if (
+          !nextThinking &&
+          role === "assistant" &&
+          !thinkingDebugRef.current.has(payload.sessionKey)
+        ) {
+          thinkingDebugRef.current.add(payload.sessionKey);
+          console.warn("No thinking trace extracted from chat event.", {
+            sessionKey: payload.sessionKey,
+            message: summarizeThinkingMessage(payload.message ?? payload),
+          });
+        }
         const thinkingText = nextThinking ?? tile?.thinkingTrace ?? null;
         const thinkingLine = thinkingText ? formatThinkingMarkdown(thinkingText) : "";
         if (thinkingLine) {
@@ -955,6 +1000,14 @@ const AgentCanvasPage = () => {
             tileId: match.tileId,
             line: thinkingLine,
           });
+        }
+        if (
+          !thinkingLine &&
+          role === "assistant" &&
+          tile &&
+          !tile.outputLines.some((line) => isTraceMarkdown(line.trim()))
+        ) {
+          void loadTileHistory(match.projectId, match.tileId);
         }
         if (typeof nextText === "string") {
           dispatch({
@@ -967,7 +1020,7 @@ const AgentCanvasPage = () => {
             type: "updateTile",
             projectId: match.projectId,
             tileId: match.tileId,
-            patch: { lastResult: summaryText || nextText },
+          patch: { lastResult: nextText },
           });
         }
         dispatch({
@@ -1010,7 +1063,7 @@ const AgentCanvasPage = () => {
         });
       }
     });
-  }, [client, dispatch, state.projects]);
+  }, [client, dispatch, loadTileHistory, state.projects, summarizeThinkingMessage]);
 
   useEffect(() => {
     return client.onEvent((event: EventFrame) => {

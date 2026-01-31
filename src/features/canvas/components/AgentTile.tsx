@@ -2,7 +2,6 @@ import type React from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { AgentTile as AgentTileType, TileSize } from "@/features/canvas/state/store";
 import { isTraceMarkdown } from "@/lib/text/extractThinking";
-import { extractSummaryText } from "@/lib/text/summary";
 import { normalizeAgentName } from "@/lib/names/agentNames";
 import { Shuffle } from "lucide-react";
 import { MAX_TILE_HEIGHT, MIN_TILE_SIZE } from "@/lib/canvasTileDefaults";
@@ -220,9 +219,9 @@ export const AgentTile = ({
 
   const latestUpdate = (() => {
     const latestPreview = tile.latestPreview?.trim();
-    if (latestPreview) return extractSummaryText(latestPreview);
+    if (latestPreview) return latestPreview;
     const lastResult = tile.lastResult?.trim();
-    if (lastResult) return extractSummaryText(lastResult);
+    if (lastResult) return lastResult;
     for (let index = tile.outputLines.length - 1; index >= 0; index -= 1) {
       const line = tile.outputLines[index];
       if (!line) continue;
@@ -230,7 +229,7 @@ export const AgentTile = ({
       if (!trimmed) continue;
       if (isTraceMarkdown(trimmed)) continue;
       if (trimmed.startsWith(">")) continue;
-      return extractSummaryText(trimmed);
+      return trimmed;
     }
     return "No updates yet.";
   })();

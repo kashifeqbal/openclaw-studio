@@ -14,9 +14,9 @@ const ENVELOPE_CHANNELS = [
   "BlueBubbles",
 ];
 
-const THINKING_TAG_RE = /<\s*\/?\s*think(?:ing)?\s*>/gi;
-const THINKING_OPEN_RE = /<\s*think(?:ing)?\s*>/i;
-const THINKING_CLOSE_RE = /<\s*\/\s*think(?:ing)?\s*>/i;
+const THINKING_TAG_RE = /<\s*\/?\s*(think(?:ing)?|analysis)\s*>/gi;
+const THINKING_OPEN_RE = /<\s*(think(?:ing)?|analysis)\s*>/i;
+const THINKING_CLOSE_RE = /<\s*\/\s*(think(?:ing)?|analysis)\s*>/i;
 
 const looksLikeEnvelopeHeader = (header: string): boolean => {
   if (/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}Z\b/.test(header)) return true;
