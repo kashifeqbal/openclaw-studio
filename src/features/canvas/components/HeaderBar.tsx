@@ -3,6 +3,7 @@ import { ThemeToggle } from "@/components/theme-toggle";
 
 type HeaderBarProps = {
   projects: Array<{ id: string; name: string; archivedAt: number | null }>;
+  hasAnyProjects: boolean;
   activeProjectId: string | null;
   status: GatewayStatus;
   onProjectChange: (projectId: string) => void;
@@ -33,6 +34,7 @@ const statusLabel: Record<GatewayStatus, string> = {
 
 export const HeaderBar = ({
   projects,
+  hasAnyProjects,
   activeProjectId,
   status,
   onProjectChange,
@@ -48,12 +50,12 @@ export const HeaderBar = ({
   onCleanupArchived,
   canCleanupArchived,
 }: HeaderBarProps) => {
-  const hasProjects = projects.length > 0;
+  const hasVisibleProjects = projects.length > 0;
   return (
     <div className="glass-panel px-6 py-4">
       <div className="grid items-center gap-4 lg:grid-cols-[minmax(0,1fr)_auto]">
         <div className="flex min-w-0 items-center gap-3">
-          {hasProjects ? (
+          {hasVisibleProjects ? (
             <div className="relative">
               <select
                 className="h-11 min-w-[200px] max-w-[min(360px,70vw)] appearance-none rounded-lg border border-input bg-background px-4 pr-10 text-sm font-semibold text-foreground shadow-sm outline-none transition focus:border-ring"
@@ -82,15 +84,17 @@ export const HeaderBar = ({
               No workspaces
             </span>
           )}
-          <label className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
-            <input
-              className="h-4 w-4 rounded border border-input text-primary"
-              type="checkbox"
-              checked={showArchived}
-              onChange={onToggleArchived}
-            />
-            Show archived
-          </label>
+          {hasAnyProjects ? (
+            <label className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+              <input
+                className="h-4 w-4 rounded border border-input text-primary"
+                type="checkbox"
+                checked={showArchived}
+                onChange={onToggleArchived}
+              />
+              Show archived
+            </label>
+          ) : null}
         </div>
 
         <div className="flex flex-col items-end gap-2">
@@ -103,91 +107,99 @@ export const HeaderBar = ({
           </div>
           <div className="flex items-center gap-2">
             <ThemeToggle />
-            <button
-              className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60"
-              type="button"
-              onClick={onNewAgent}
-              disabled={!activeProjectId || activeProjectArchived}
-            >
-              New Agent
-            </button>
-            <details className="relative">
-              <summary className="flex h-10 items-center gap-2 rounded-lg border border-input bg-background px-4 text-sm font-semibold text-foreground transition hover:border-ring [&::-webkit-details-marker]:hidden">
-                Workspaces
-                <span className="text-xs font-semibold text-muted-foreground">v</span>
-              </summary>
-              <div className="absolute right-0 mt-2 w-56 rounded-lg border border-border bg-popover p-2 text-sm shadow-md">
-                <button
-                  className="flex w-full items-center rounded-md px-3 py-2 text-left text-sm font-semibold text-foreground transition hover:bg-muted"
-                  type="button"
-                  onClick={(event) => {
-                    onCreateProject();
-                    const details = event.currentTarget.closest(
-                      "details"
-                    ) as HTMLDetailsElement | null;
-                    if (details) details.open = false;
-                  }}
-                >
-                  New Workspace
-                </button>
-                <button
-                  className="flex w-full items-center rounded-md px-3 py-2 text-left text-sm font-semibold text-foreground transition hover:bg-muted"
-                  type="button"
-                  onClick={(event) => {
-                    onOpenProject();
-                    const details = event.currentTarget.closest(
-                      "details"
-                    ) as HTMLDetailsElement | null;
-                    if (details) details.open = false;
-                  }}
-                >
-                  Open Workspace
-                </button>
-                <button
-                  className="flex w-full items-center rounded-md px-3 py-2 text-left text-sm font-semibold text-foreground transition hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
-                  type="button"
-                  onClick={(event) => {
-                    onDeleteProject();
-                    const details = event.currentTarget.closest(
-                      "details"
-                    ) as HTMLDetailsElement | null;
-                    if (details) details.open = false;
-                  }}
-                  disabled={!activeProjectId}
-                >
-                  {activeProjectArchived ? "Restore Workspace" : "Archive Workspace"}
-                </button>
-                <button
-                  className="mt-1 flex w-full items-center rounded-md px-3 py-2 text-left text-sm font-semibold text-foreground transition hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
-                  type="button"
-                  onClick={(event) => {
-                    onCleanupArchived();
-                    const details = event.currentTarget.closest(
-                      "details"
-                    ) as HTMLDetailsElement | null;
-                    if (details) details.open = false;
-                  }}
-                  disabled={!canCleanupArchived}
-                >
-                  Clean Archived Agents
-                </button>
-                {canCreateDiscordChannel ? (
+            {activeProjectId ? (
+              <button
+                className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60"
+                type="button"
+                onClick={onNewAgent}
+                disabled={activeProjectArchived}
+              >
+                New Agent
+              </button>
+            ) : null}
+            {hasAnyProjects ? (
+              <details className="relative">
+                <summary className="flex h-10 items-center gap-2 rounded-lg border border-input bg-background px-4 text-sm font-semibold text-foreground transition hover:border-ring [&::-webkit-details-marker]:hidden">
+                  Workspaces
+                  <span className="text-xs font-semibold text-muted-foreground">v</span>
+                </summary>
+                <div className="absolute right-0 mt-2 w-56 rounded-lg border border-border bg-popover p-2 text-sm shadow-md">
                   <button
-                    className="mt-1 flex w-full items-center rounded-md px-3 py-2 text-left text-sm font-semibold text-foreground transition hover:bg-muted"
+                    className="flex w-full items-center rounded-md px-3 py-2 text-left text-sm font-semibold text-foreground transition hover:bg-muted"
                     type="button"
                     onClick={(event) => {
-                      onCreateDiscordChannel();
+                      onCreateProject();
                       const details = event.currentTarget.closest(
                         "details"
                       ) as HTMLDetailsElement | null;
                       if (details) details.open = false;
                     }}
                   >
-                    Create Discord Channel
+                    New Workspace
                   </button>
-                ) : null}
+                  <button
+                    className="flex w-full items-center rounded-md px-3 py-2 text-left text-sm font-semibold text-foreground transition hover:bg-muted"
+                    type="button"
+                    onClick={(event) => {
+                      onOpenProject();
+                      const details = event.currentTarget.closest(
+                        "details"
+                      ) as HTMLDetailsElement | null;
+                      if (details) details.open = false;
+                    }}
+                  >
+                    Open Workspace
+                  </button>
+                  <button
+                    className="flex w-full items-center rounded-md px-3 py-2 text-left text-sm font-semibold text-foreground transition hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+                    type="button"
+                    onClick={(event) => {
+                      onDeleteProject();
+                      const details = event.currentTarget.closest(
+                        "details"
+                      ) as HTMLDetailsElement | null;
+                      if (details) details.open = false;
+                    }}
+                    disabled={!activeProjectId}
+                  >
+                    {activeProjectArchived ? "Restore Workspace" : "Archive Workspace"}
+                  </button>
+                  <button
+                    className="mt-1 flex w-full items-center rounded-md px-3 py-2 text-left text-sm font-semibold text-foreground transition hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+                    type="button"
+                    onClick={(event) => {
+                      onCleanupArchived();
+                      const details = event.currentTarget.closest(
+                        "details"
+                      ) as HTMLDetailsElement | null;
+                      if (details) details.open = false;
+                    }}
+                    disabled={!canCleanupArchived}
+                  >
+                    Clean Archived Agents
+                  </button>
+                  {canCreateDiscordChannel ? (
+                    <button
+                      className="mt-1 flex w-full items-center rounded-md px-3 py-2 text-left text-sm font-semibold text-foreground transition hover:bg-muted"
+                      type="button"
+                      onClick={(event) => {
+                        onCreateDiscordChannel();
+                        const details = event.currentTarget.closest(
+                          "details"
+                        ) as HTMLDetailsElement | null;
+                        if (details) details.open = false;
+                      }}
+                    >
+                      Create Discord Channel
+                    </button>
+                  ) : null}
+                </div>
+              </details>
+            ) : (
+              <div className="flex h-10 items-center rounded-lg border border-input bg-background px-4 text-sm font-semibold text-muted-foreground">
+                No workspaces yet
               </div>
-            </details>
+            )}
           </div>
         </div>
       </div>

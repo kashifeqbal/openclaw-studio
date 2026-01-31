@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Clawdbot Agent Canvas",
+  title: "OpenClaw Studio",
   description: "Standalone operator canvas for the Clawdbot gateway.",
 };
 

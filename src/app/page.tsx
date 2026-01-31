@@ -211,6 +211,7 @@ const AgentCanvasPage = () => {
     () => filterArchivedItems(state.projects, showArchived),
     [state.projects, showArchived]
   );
+  const hasAnyProjects = state.projects.length > 0;
   const hasArchivedTiles = useMemo(
     () => state.projects.some((entry) => entry.tiles.some((tile) => tile.archivedAt)),
     [state.projects]
@@ -1002,6 +1003,20 @@ const AgentCanvasPage = () => {
 
   // Zoom controls are available in the bottom-right of the canvas.
 
+  const handleToggleProjectForm = useCallback(() => {
+    setProjectWarnings([]);
+    setOpenProjectWarnings([]);
+    setShowOpenProjectForm(false);
+    setShowProjectForm((prev) => !prev);
+  }, []);
+
+  const handleToggleOpenProjectForm = useCallback(() => {
+    setProjectWarnings([]);
+    setOpenProjectWarnings([]);
+    setShowProjectForm(false);
+    setShowOpenProjectForm((prev) => !prev);
+  }, []);
+
   const handleProjectCreate = useCallback(async () => {
     if (!projectName.trim()) {
       setProjectWarnings(["Workspace name is required."]);
@@ -1231,6 +1246,7 @@ const AgentCanvasPage = () => {
               name: entry.name,
               archivedAt: entry.archivedAt,
             }))}
+            hasAnyProjects={hasAnyProjects}
             activeProjectId={project?.id ?? null}
             status={status}
             onProjectChange={(projectId) =>
@@ -1239,18 +1255,8 @@ const AgentCanvasPage = () => {
                 projectId: projectId.trim() ? projectId : null,
               })
             }
-            onCreateProject={() => {
-              setProjectWarnings([]);
-              setOpenProjectWarnings([]);
-              setShowOpenProjectForm(false);
-              setShowProjectForm((prev) => !prev);
-            }}
-            onOpenProject={() => {
-              setProjectWarnings([]);
-              setOpenProjectWarnings([]);
-              setShowProjectForm(false);
-              setShowOpenProjectForm((prev) => !prev);
-            }}
+            onCreateProject={handleToggleProjectForm}
+            onOpenProject={handleToggleOpenProjectForm}
             onDeleteProject={handleProjectDelete}
             showArchived={showArchived}
             onToggleArchived={() => setShowArchived((prev) => !prev)}
@@ -1362,13 +1368,50 @@ const AgentCanvasPage = () => {
           </div>
         ) : null}
 
-        {project ? null : (
-          <div className="pointer-events-auto mx-auto w-full max-w-4xl">
-            <div className="glass-panel px-6 py-8 text-muted-foreground">
-              Create a workspace to begin.
+        {!state.loading && !showProjectForm && !showOpenProjectForm && !hasAnyProjects ? (
+          <div className="pointer-events-auto mx-auto w-full max-w-5xl">
+            <div className="glass-panel px-8 py-10">
+              <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_260px] lg:items-center">
+                <div className="flex flex-col gap-5">
+                  <div className="space-y-2">
+                    <h2 className="text-2xl font-semibold text-foreground sm:text-3xl">
+                      Run autonomous agents. Watch progress, not prompts.
+                    </h2>
+                    <p className="text-sm text-muted-foreground">
+                      A shared workspace where agents explore, build, and report progress
+                      in real time.
+                    </p>
+                  </div>
+
+                  <div className="flex flex-col items-start gap-2">
+                    <div className="relative">
+                      <button
+                        className="rounded-lg bg-primary px-5 py-2 text-sm font-semibold text-primary-foreground transition hover:brightness-110"
+                        type="button"
+                        onClick={handleToggleProjectForm}
+                      >
+                        Create a workspace
+                      </button>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Takes ~30 seconds. No configuration required.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-center">
+                  <div className="relative h-48 w-64">
+                    <div className="absolute left-1/2 top-1/2 h-36 w-36 -translate-x-1/2 -translate-y-1/2 rounded-full border border-dashed border-border/40" />
+                    <div className="absolute left-1/2 top-1/2 h-10 w-10 -translate-x-1/2 -translate-y-1/2 rounded-full bg-primary/10" />
+                    <span className="absolute left-6 top-6 h-2 w-2 rounded-full bg-primary/40" />
+                    <span className="absolute right-8 top-12 h-2 w-2 rounded-full bg-primary/40" />
+                    <span className="absolute bottom-6 left-1/2 h-2 w-2 -translate-x-1/2 rounded-full bg-primary/40" />
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
-        )}
+        ) : null}
       </div>
     </div>
   );

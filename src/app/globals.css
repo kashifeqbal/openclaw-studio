@@ -139,6 +139,15 @@ body {
   color: var(--foreground);
 }
 
+button:not(:disabled),
+input[type="button"]:not(:disabled),
+input[type="submit"]:not(:disabled),
+input[type="reset"]:not(:disabled),
+summary,
+[role="button"]:not([aria-disabled="true"]) {
+  cursor: pointer;
+}
+
 * {
   box-sizing: border-box;
 }
