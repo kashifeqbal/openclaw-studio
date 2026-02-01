@@ -1,8 +1,7 @@
 import type React from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { AgentTile as AgentTileType, TileSize } from "@/features/canvas/state/store";
-import { isTraceMarkdown } from "@/lib/text/extractThinking";
-import { isToolMarkdown } from "@/lib/text/extractTools";
+import { isTraceMarkdown, isToolMarkdown } from "@/lib/text/message-extract";
 import { extractSummaryText } from "@/lib/text/summary";
 import { normalizeAgentName } from "@/lib/names/agentNames";
 import { Shuffle } from "lucide-react";
@@ -74,12 +73,14 @@ export const AgentTile = ({
   }, []);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setNameDraft(tile.name);
   }, [tile.name]);
 
   useEffect(() => {
     if (tile.draft === plainDraftRef.current) return;
     plainDraftRef.current = tile.draft;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setMentionsValue(tile.draft);
   }, [tile.draft]);
 
@@ -129,7 +130,7 @@ export const AgentTile = ({
         return [];
       }
     },
-    [fetchPathSuggestions]
+    []
   );
 
   const scheduleResize = useCallback(
@@ -365,9 +366,7 @@ export const AgentTile = ({
               className="nodrag rounded-lg border border-border px-3 py-2 text-[11px] font-semibold text-muted-foreground hover:bg-card"
               type="button"
               data-testid="agent-inspect-toggle"
-              onClick={(event) => {
-                onInspect();
-              }}
+              onClick={onInspect}
             >
               Inspect
             </button>

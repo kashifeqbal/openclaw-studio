@@ -5,8 +5,12 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { AgentTile } from "@/features/canvas/state/store";
-import { isTraceMarkdown, stripTraceMarkdown } from "@/lib/text/extractThinking";
-import { isToolMarkdown, parseToolMarkdown } from "@/lib/text/extractTools";
+import {
+  isTraceMarkdown,
+  stripTraceMarkdown,
+  isToolMarkdown,
+  parseToolMarkdown,
+} from "@/lib/text/message-extract";
 import type { GatewayModelChoice } from "@/lib/gateway/models";
 import {
   fetchProjectTileHeartbeat,

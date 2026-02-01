@@ -1,5 +1,5 @@
 import type { AgentTile } from "./store";
-import { extractText } from "@/lib/text/extractText";
+import { extractText } from "@/lib/text/message-extract";
 import { stripUiMetadata, isUiMetadataPrefix } from "@/lib/text/uiMetadata";
 
 export type ChatEventPayload = {

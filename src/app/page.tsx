@@ -8,13 +8,13 @@ import { HeaderBar } from "@/features/canvas/components/HeaderBar";
 import { WorkspaceSettingsPanel } from "@/features/canvas/components/WorkspaceSettingsPanel";
 import { MAX_TILE_HEIGHT, MIN_TILE_SIZE } from "@/lib/canvasTileDefaults";
 import { screenToWorld, worldToScreen } from "@/features/canvas/lib/transform";
-import { extractText } from "@/lib/text/extractText";
 import {
+  extractText,
   extractThinking,
   formatThinkingMarkdown,
   isTraceMarkdown,
-} from "@/lib/text/extractThinking";
-import { extractToolLines } from "@/lib/text/extractTools";
+  extractToolLines,
+} from "@/lib/text/message-extract";
 import { isHeartbeatPrompt, isUiMetadataPrefix, stripUiMetadata } from "@/lib/text/uiMetadata";
 import { useGatewayConnection } from "@/lib/gateway/useGatewayConnection";
 import type { EventFrame } from "@/lib/gateway/frames";

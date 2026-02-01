@@ -5,7 +5,7 @@ import {
   formatThinkingMarkdown,
   isTraceMarkdown,
   stripTraceMarkdown,
-} from "@/lib/text/extractThinking";
+} from "@/lib/text/message-extract";
 
 describe("extractThinking", () => {
   it("extracts thinking blocks from content arrays", () => {
