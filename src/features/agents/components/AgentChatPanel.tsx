@@ -114,8 +114,8 @@ export const AgentChatPanel = ({
 
   const avatarSeed = agent.avatarSeed ?? agent.agentId;
   return (
-    <div data-agent-panel className="group relative flex h-full w-full flex-col">
-      <div className="px-4 pt-4">
+    <div data-agent-panel className="group fade-up relative flex h-full w-full flex-col">
+      <div className="px-3 pt-3 sm:px-4 sm:pt-4">
         <div className="flex items-start justify-between gap-4">
           <div className="flex items-start gap-3">
             <div className="relative">
@@ -127,7 +127,7 @@ export const AgentChatPanel = ({
                 isSelected={isSelected}
               />
               <button
-                className="nodrag absolute -bottom-2 -right-2 flex h-8 w-8 items-center justify-center rounded-md border border-border bg-card text-muted-foreground shadow-sm hover:bg-card"
+                className="nodrag absolute -bottom-2 -right-2 flex h-8 w-8 items-center justify-center rounded-md border border-border/80 bg-card text-muted-foreground shadow-sm transition hover:border-primary/60 hover:bg-card"
                 type="button"
                 aria-label="Shuffle avatar"
                 data-testid="agent-avatar-shuffle"
@@ -142,12 +142,12 @@ export const AgentChatPanel = ({
             </div>
             <div className="flex flex-col gap-2">
               <div
-                className={`flex items-center gap-2 rounded-lg border bg-card px-3 py-1 shadow-sm ${
+                className={`flex items-center gap-2 rounded-md border bg-card/80 px-3 py-1 shadow-sm ${
                   isSelected ? "agent-name-selected" : "border-border"
                 }`}
               >
                 <input
-                  className="w-full bg-transparent text-center text-xs font-semibold uppercase tracking-wide text-foreground outline-none"
+                  className="w-full bg-transparent text-center text-xs font-semibold uppercase tracking-[0.16em] text-foreground outline-none"
                   value={nameDraft}
                   onChange={(event) => setNameDraft(event.target.value)}
                   onBlur={() => {
@@ -164,7 +164,7 @@ export const AgentChatPanel = ({
                   }}
                 />
                 <button
-                  className="nodrag flex h-6 w-6 items-center justify-center rounded-md border border-border bg-card text-muted-foreground hover:bg-card"
+                  className="nodrag flex h-6 w-6 items-center justify-center rounded-md border border-border/80 bg-card text-muted-foreground transition hover:border-primary/60 hover:bg-card"
                   type="button"
                   aria-label="Shuffle name"
                   data-testid="agent-name-shuffle"
@@ -179,12 +179,12 @@ export const AgentChatPanel = ({
               </div>
               <div className="flex flex-wrap items-center gap-2">
                 <span
-                  className={`rounded-md px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${statusColor}`}
+                  className={`rounded-md px-2 py-0.5 font-mono text-[9px] font-semibold uppercase tracking-[0.14em] ${statusColor}`}
                 >
                   {statusLabel}
                 </span>
                 <button
-                  className="nodrag rounded-lg border border-border px-3 py-2 text-[11px] font-semibold text-muted-foreground hover:bg-card"
+                  className="nodrag rounded-md border border-border/80 bg-card/60 px-3 py-2 font-mono text-[10px] font-semibold uppercase tracking-[0.13em] text-muted-foreground transition hover:border-primary/50 hover:bg-card"
                   type="button"
                   data-testid="agent-inspect-toggle"
                   onClick={onInspect}
@@ -197,10 +197,10 @@ export const AgentChatPanel = ({
         </div>
       </div>
 
-      <div className="mt-3 flex min-h-0 flex-1 flex-col gap-3 px-4 pb-4">
+      <div className="mt-3 flex min-h-0 flex-1 flex-col gap-3 px-3 pb-3 sm:px-4 sm:pb-4">
         <div
           ref={chatRef}
-          className="flex-1 overflow-auto rounded-lg border border-border bg-card p-3"
+          className="flex-1 overflow-auto rounded-md border border-border/80 bg-card/75 p-3 sm:p-4"
           onWheel={(event) => {
             event.stopPropagation();
           }}
@@ -218,10 +218,10 @@ export const AgentChatPanel = ({
                     return (
                       <details
                         key={`chat-${agent.agentId}-thinking-${index}`}
-                        className="rounded-md bg-muted/60 px-2 py-1 text-[11px] text-muted-foreground"
+                        className="rounded-md border border-border/70 bg-muted/55 px-2 py-1 text-[11px] text-muted-foreground"
                         open={item.live && agent.status === "running"}
                       >
-                        <summary className="cursor-pointer select-none font-semibold">
+                        <summary className="cursor-pointer select-none font-mono text-[10px] font-semibold uppercase tracking-[0.11em]">
                           Thinking
                         </summary>
                         <div className="agent-markdown mt-1 text-foreground">
@@ -236,7 +236,7 @@ export const AgentChatPanel = ({
                     return (
                       <div
                         key={`chat-${agent.agentId}-user-${index}`}
-                        className="rounded-md bg-muted/70 px-3 py-2 text-foreground"
+                        className="rounded-md border border-border/70 bg-muted/70 px-3 py-2 text-foreground"
                       >
                         <ReactMarkdown remarkPlugins={[remarkGfm]}>{`> ${item.text}`}</ReactMarkdown>
                       </div>
@@ -247,9 +247,9 @@ export const AgentChatPanel = ({
                     return (
                       <details
                         key={`chat-${agent.agentId}-tool-${index}`}
-                        className="rounded-md bg-muted/60 px-2 py-1 text-[11px] text-muted-foreground"
+                        className="rounded-md border border-border/70 bg-muted/55 px-2 py-1 text-[11px] text-muted-foreground"
                       >
-                        <summary className="cursor-pointer select-none font-semibold">
+                        <summary className="cursor-pointer select-none font-mono text-[10px] font-semibold uppercase tracking-[0.11em]">
                           {summaryText}
                         </summary>
                         {body ? (
@@ -263,7 +263,7 @@ export const AgentChatPanel = ({
                   return (
                     <div
                       key={`chat-${agent.agentId}-assistant-${index}`}
-                      className={`agent-markdown ${item.live ? "opacity-80" : ""}`}
+                      className={`agent-markdown rounded-md border border-transparent px-0.5 ${item.live ? "opacity-85" : ""}`}
                     >
                       <ReactMarkdown remarkPlugins={[remarkGfm]}>{item.text}</ReactMarkdown>
                     </div>
@@ -279,7 +279,7 @@ export const AgentChatPanel = ({
             ref={handleDraftRef}
             rows={1}
             value={draftValue}
-            className="flex-1 resize-none rounded-lg border border-border bg-card px-3 py-2 text-[11px] text-foreground outline-none"
+            className="flex-1 resize-none rounded-md border border-border/80 bg-card/75 px-3 py-2 text-[11px] text-foreground outline-none transition focus:border-ring"
             onChange={(event) => {
               const value = event.target.value;
               plainDraftRef.current = value;
@@ -299,7 +299,7 @@ export const AgentChatPanel = ({
             placeholder="type a message"
           />
           <button
-            className="rounded-lg border border-transparent bg-primary px-3 py-2 text-[11px] font-semibold text-primary-foreground shadow-sm transition hover:brightness-105 disabled:cursor-not-allowed disabled:border-border disabled:bg-muted disabled:text-muted-foreground disabled:shadow-none"
+            className="rounded-md border border-transparent bg-primary px-3 py-2 font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-primary-foreground shadow-sm transition hover:brightness-110 disabled:cursor-not-allowed disabled:border-border disabled:bg-muted disabled:text-muted-foreground disabled:shadow-none"
             type="button"
             onClick={() => onSend(draftValue)}
             disabled={!canSend || agent.status === "running" || !draftValue.trim()}

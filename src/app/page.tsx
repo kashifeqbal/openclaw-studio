@@ -1782,8 +1782,14 @@ const AgentStudioPage = () => {
   const connectionPanelVisible = showConnectionPanel || status !== "connected";
 
   return (
-    <div className="relative h-screen w-screen overflow-hidden bg-background">
-      <div className="relative z-10 flex h-full flex-col gap-4 p-4 md:p-6">
+    <div className="relative min-h-screen w-screen overflow-hidden bg-background">
+      <div className="pointer-events-none absolute inset-0 z-0">
+        <div className="absolute -left-24 top-10 h-48 w-48 rounded-full bg-primary/20 blur-3xl" />
+        <div className="absolute right-0 top-1/3 h-64 w-64 rounded-full bg-accent/20 blur-3xl" />
+        <div className="absolute bottom-8 left-1/3 h-44 w-44 rounded-full bg-primary/15 blur-3xl" />
+      </div>
+
+      <div className="relative z-10 flex h-screen flex-col gap-4 px-3 py-3 sm:px-4 sm:py-4 md:px-6 md:py-6">
         <div className="w-full">
           <HeaderBar
             status={status}
@@ -1795,7 +1801,7 @@ const AgentStudioPage = () => {
 
         {state.loading ? (
           <div className="w-full">
-            <div className="glass-panel px-6 py-6 text-muted-foreground">
+            <div className="glass-panel px-6 py-6 font-mono text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
               Loading agents…
             </div>
           </div>
@@ -1803,7 +1809,7 @@ const AgentStudioPage = () => {
 
         {connectionPanelVisible ? (
           <div className="w-full">
-            <div className="glass-panel px-6 py-6">
+            <div className="glass-panel px-4 py-4 sm:px-6 sm:py-6">
               <ConnectionPanel
                 gatewayUrl={gatewayUrl}
                 token={token}
@@ -1820,13 +1826,13 @@ const AgentStudioPage = () => {
 
         {errorMessage ? (
           <div className="w-full">
-            <div className="rounded-lg border border-destructive bg-destructive px-4 py-2 text-sm text-destructive-foreground">
+            <div className="rounded-md border border-destructive bg-destructive px-4 py-2 text-sm text-destructive-foreground">
               {errorMessage}
             </div>
           </div>
         ) : null}
 
-        <div className="flex min-h-0 flex-1 flex-col gap-4 md:flex-row">
+        <div className="flex min-h-0 flex-1 flex-col gap-4 xl:flex-row">
           <FleetSidebar
             agents={filteredAgents}
             selectedAgentId={focusedAgent?.agentId ?? state.selectedAgentId}
@@ -1837,7 +1843,7 @@ const AgentStudioPage = () => {
             }
           />
           <div
-            className="glass-panel min-h-0 flex-1 p-2"
+            className="glass-panel min-h-0 flex-1 overflow-hidden p-2 sm:p-3"
             data-testid="focused-agent-panel"
           >
             {focusedAgent ? (
@@ -1863,7 +1869,7 @@ const AgentStudioPage = () => {
                 onNameShuffle={() => handleNameShuffle(focusedAgent.agentId)}
               />
             ) : (
-              <div className="flex h-full items-center justify-center rounded-lg border border-border bg-card p-6 text-sm text-muted-foreground">
+              <div className="flex h-full items-center justify-center rounded-md border border-border/80 bg-card/70 p-6 text-sm text-muted-foreground">
                 {agents.length > 0
                   ? "No agents match this filter."
                   : "No agents available."}
@@ -1871,7 +1877,7 @@ const AgentStudioPage = () => {
             )}
           </div>
           {inspectAgent ? (
-            <div className="glass-panel min-h-0 w-full shrink-0 overflow-hidden p-0 lg:min-w-[360px] lg:max-w-[420px]">
+            <div className="glass-panel min-h-0 w-full shrink-0 overflow-hidden p-0 xl:min-w-[360px] xl:max-w-[430px]">
               <AgentInspectPanel
                 key={inspectAgent.agentId}
                 agent={inspectAgent}

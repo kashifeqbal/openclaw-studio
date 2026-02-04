@@ -377,15 +377,15 @@ export const AgentInspectPanel = ({
       data-testid="agent-inspect-panel"
       style={{ position: "relative", left: "auto", top: "auto", width: "100%", height: "100%" }}
     >
-      <div className="flex items-center justify-between border-b border-border px-4 py-3">
+      <div className="flex items-center justify-between border-b border-border/80 px-4 py-3">
         <div>
-          <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          <div className="font-mono text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
             Inspect
           </div>
-          <div className="text-sm font-semibold text-foreground">{agent.name}</div>
+          <div className="console-title text-2xl leading-none text-foreground">{agent.name}</div>
         </div>
         <button
-          className="rounded-lg border border-border px-3 py-2 text-xs font-semibold uppercase text-muted-foreground"
+          className="rounded-md border border-border/80 bg-card/70 px-3 py-2 font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground transition hover:border-primary/50 hover:bg-card"
           type="button"
           data-testid="agent-inspect-close"
           onClick={onClose}
@@ -396,14 +396,14 @@ export const AgentInspectPanel = ({
 
       <div className="flex flex-col gap-4 p-4">
         <section
-          className="flex min-h-[420px] flex-1 flex-col rounded-lg border border-border bg-card p-4"
+          className="flex min-h-[420px] flex-1 flex-col rounded-md border border-border/80 bg-card/70 p-4"
           data-testid="agent-inspect-files"
         >
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            <div className="font-mono text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
               Brain files
             </div>
-            <div className="text-[11px] font-semibold uppercase text-muted-foreground">
+            <div className="font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
               {agentFilesLoading
                 ? "Loading..."
                 : agentFilesDirty
@@ -412,7 +412,7 @@ export const AgentInspectPanel = ({
             </div>
           </div>
           {agentFilesError ? (
-            <div className="mt-3 rounded-lg border border-destructive bg-destructive px-3 py-2 text-xs text-destructive-foreground">
+            <div className="mt-3 rounded-md border border-destructive bg-destructive px-3 py-2 text-xs text-destructive-foreground">
               {agentFilesError}
             </div>
           ) : null}
@@ -424,10 +424,10 @@ export const AgentInspectPanel = ({
                 <button
                   key={name}
                   type="button"
-                  className={`rounded-full border px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide transition ${
+                  className={`rounded-full border px-3 py-1.5 font-mono text-[10px] font-semibold uppercase tracking-[0.12em] transition ${
                     active
                       ? "border-border bg-background text-foreground shadow-sm"
-                      : "border-transparent bg-muted/60 text-muted-foreground hover:bg-muted"
+                      : "border-transparent bg-muted/60 text-muted-foreground hover:border-primary/40 hover:bg-muted"
                   }`}
                   onClick={() => handleAgentFileTabChange(name)}
                 >
@@ -436,10 +436,10 @@ export const AgentInspectPanel = ({
               );
             })}
           </div>
-          <div className="mt-3 flex-1 overflow-auto rounded-lg bg-muted/40 p-4">
+          <div className="mt-3 flex-1 overflow-auto rounded-md border border-border/70 bg-muted/40 p-4">
             <div className="flex items-start justify-between gap-3">
               <div>
-                <div className="text-sm font-semibold text-foreground">
+                <div className="text-sm font-semibold uppercase tracking-[0.05em] text-foreground">
                   {AGENT_FILE_META[agentFileTab].title}
                 </div>
                 <div className="text-xs text-muted-foreground">
@@ -447,14 +447,14 @@ export const AgentInspectPanel = ({
                 </div>
               </div>
               {!agentFiles[agentFileTab].exists ? (
-                <span className="rounded-md border border-border bg-accent px-2 py-1 text-[10px] font-semibold uppercase text-accent-foreground">
+                <span className="rounded-md border border-border bg-accent px-2 py-1 font-mono text-[9px] font-semibold uppercase tracking-[0.12em] text-accent-foreground">
                   new
                 </span>
               ) : null}
             </div>
 
             <textarea
-              className="mt-4 min-h-[220px] w-full resize-none rounded-lg border border-border bg-background px-3 py-2 text-xs text-foreground outline-none"
+              className="mt-4 min-h-[220px] w-full resize-none rounded-md border border-border bg-background/75 px-3 py-2 font-mono text-xs text-foreground outline-none"
               value={agentFiles[agentFileTab].content}
               placeholder={
                 agentFiles[agentFileTab].content.trim().length === 0
@@ -480,17 +480,17 @@ export const AgentInspectPanel = ({
         </section>
 
         <section
-          className="rounded-lg border border-border bg-card p-4"
+          className="rounded-md border border-border/80 bg-card/70 p-4"
           data-testid="agent-inspect-settings"
         >
-          <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          <div className="font-mono text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
             Settings
           </div>
           <div className="mt-3 grid gap-3 md:grid-cols-[1.2fr_1fr]">
-            <label className="flex min-w-0 flex-col gap-2 text-xs font-semibold uppercase text-muted-foreground">
+            <label className="flex min-w-0 flex-col gap-2 font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
               <span>Model</span>
               <select
-                className="h-10 w-full min-w-0 overflow-hidden text-ellipsis whitespace-nowrap rounded-lg border border-border bg-card px-3 text-xs font-semibold text-foreground"
+                className="h-10 w-full min-w-0 overflow-hidden text-ellipsis whitespace-nowrap rounded-md border border-border bg-card/75 px-3 text-xs font-semibold text-foreground"
                 value={agent.model ?? ""}
                 onChange={(event) => {
                   const value = event.target.value.trim();
@@ -508,10 +508,10 @@ export const AgentInspectPanel = ({
               </select>
             </label>
             {allowThinking ? (
-              <label className="flex flex-col gap-2 text-xs font-semibold uppercase text-muted-foreground">
+              <label className="flex flex-col gap-2 font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
                 <span>Thinking</span>
                 <select
-                  className="h-10 rounded-lg border border-border bg-card px-3 text-xs font-semibold text-foreground"
+                  className="h-10 rounded-md border border-border bg-card/75 px-3 text-xs font-semibold text-foreground"
                   value={agent.thinkingLevel ?? ""}
                   onChange={(event) => {
                     const value = event.target.value.trim();
@@ -533,7 +533,7 @@ export const AgentInspectPanel = ({
           </div>
 
           <div className="mt-4 grid gap-3 md:grid-cols-2">
-            <label className="flex items-center justify-between gap-3 rounded-lg border border-border bg-card px-3 py-2 text-xs font-semibold uppercase text-muted-foreground">
+            <label className="flex items-center justify-between gap-3 rounded-md border border-border/80 bg-card/75 px-3 py-2 font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
               <span>Show tool calls</span>
               <input
                 type="checkbox"
@@ -542,7 +542,7 @@ export const AgentInspectPanel = ({
                 onChange={(event) => onToolCallingToggle(event.target.checked)}
               />
             </label>
-            <label className="flex items-center justify-between gap-3 rounded-lg border border-border bg-card px-3 py-2 text-xs font-semibold uppercase text-muted-foreground">
+            <label className="flex items-center justify-between gap-3 rounded-md border border-border/80 bg-card/75 px-3 py-2 font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
               <span>Show thinking</span>
               <input
                 type="checkbox"
@@ -553,12 +553,12 @@ export const AgentInspectPanel = ({
             </label>
           </div>
 
-          <div className="mt-4 rounded-lg border border-border bg-card p-4">
+          <div className="mt-4 rounded-md border border-border/80 bg-card/70 p-4">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              <div className="font-mono text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
                 Heartbeat config
               </div>
-              <div className="text-[11px] font-semibold uppercase text-muted-foreground">
+              <div className="font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
                 {heartbeatLoading
                   ? "Loading..."
                   : heartbeatDirty
@@ -567,11 +567,11 @@ export const AgentInspectPanel = ({
               </div>
             </div>
             {heartbeatError ? (
-              <div className="mt-3 rounded-lg border border-destructive bg-destructive px-3 py-2 text-xs text-destructive-foreground">
+              <div className="mt-3 rounded-md border border-destructive bg-destructive px-3 py-2 text-xs text-destructive-foreground">
                 {heartbeatError}
               </div>
             ) : null}
-            <label className="mt-4 flex items-center justify-between gap-3 text-xs font-semibold uppercase text-muted-foreground">
+            <label className="mt-4 flex items-center justify-between gap-3 font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
               <span>Override defaults</span>
               <input
                 type="checkbox"
@@ -584,7 +584,7 @@ export const AgentInspectPanel = ({
                 }}
               />
             </label>
-            <label className="mt-4 flex items-center justify-between gap-3 text-xs font-semibold uppercase text-muted-foreground">
+            <label className="mt-4 flex items-center justify-between gap-3 font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
               <span>Enabled</span>
               <input
                 type="checkbox"
@@ -598,10 +598,10 @@ export const AgentInspectPanel = ({
                 }}
               />
             </label>
-            <label className="mt-4 flex flex-col gap-2 text-xs font-semibold uppercase text-muted-foreground">
+            <label className="mt-4 flex flex-col gap-2 font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
               <span>Interval</span>
               <select
-                className="h-10 rounded-lg border border-border bg-card px-3 text-xs font-semibold text-foreground"
+                className="h-10 rounded-md border border-border bg-card/75 px-3 text-xs font-semibold text-foreground"
                 value={heartbeatIntervalMode === "custom" ? "custom" : heartbeatEvery}
                 disabled={heartbeatLoading || heartbeatSaving}
                 onChange={(event) => {
@@ -628,7 +628,7 @@ export const AgentInspectPanel = ({
               <input
                 type="number"
                 min={1}
-                className="mt-2 h-10 w-full rounded-lg border border-border bg-card px-3 text-xs text-foreground outline-none"
+                className="mt-2 h-10 w-full rounded-md border border-border bg-card/75 px-3 text-xs text-foreground outline-none"
                 value={heartbeatCustomMinutes}
                 disabled={heartbeatLoading || heartbeatSaving}
                 onChange={(event) => {
@@ -639,10 +639,10 @@ export const AgentInspectPanel = ({
                 placeholder="Minutes"
               />
             ) : null}
-            <label className="mt-4 flex flex-col gap-2 text-xs font-semibold uppercase text-muted-foreground">
+            <label className="mt-4 flex flex-col gap-2 font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
               <span>Target</span>
               <select
-                className="h-10 rounded-lg border border-border bg-card px-3 text-xs font-semibold text-foreground"
+                className="h-10 rounded-md border border-border bg-card/75 px-3 text-xs font-semibold text-foreground"
                 value={heartbeatTargetMode}
                 disabled={heartbeatLoading || heartbeatSaving}
                 onChange={(event) => {
@@ -660,7 +660,7 @@ export const AgentInspectPanel = ({
             </label>
             {heartbeatTargetMode === "custom" ? (
               <input
-                className="mt-2 h-10 w-full rounded-lg border border-border bg-card px-3 text-xs text-foreground outline-none"
+                className="mt-2 h-10 w-full rounded-md border border-border bg-card/75 px-3 text-xs text-foreground outline-none"
                 value={heartbeatTargetCustom}
                 disabled={heartbeatLoading || heartbeatSaving}
                 onChange={(event) => {
@@ -671,7 +671,7 @@ export const AgentInspectPanel = ({
                 placeholder="Channel id (e.g., whatsapp)"
               />
             ) : null}
-            <label className="mt-4 flex items-center justify-between gap-3 text-xs font-semibold uppercase text-muted-foreground">
+            <label className="mt-4 flex items-center justify-between gap-3 font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
               <span>Include reasoning</span>
               <input
                 type="checkbox"
@@ -685,7 +685,7 @@ export const AgentInspectPanel = ({
                 }}
               />
             </label>
-            <label className="mt-4 flex items-center justify-between gap-3 text-xs font-semibold uppercase text-muted-foreground">
+            <label className="mt-4 flex items-center justify-between gap-3 font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
               <span>Active hours</span>
               <input
                 type="checkbox"
@@ -703,7 +703,7 @@ export const AgentInspectPanel = ({
               <div className="mt-2 grid gap-2 sm:grid-cols-2">
                 <input
                   type="time"
-                  className="h-10 w-full rounded-lg border border-border bg-card px-3 text-xs text-foreground outline-none"
+                  className="h-10 w-full rounded-md border border-border bg-card/75 px-3 text-xs text-foreground outline-none"
                   value={heartbeatActiveStart}
                   disabled={heartbeatLoading || heartbeatSaving}
                   onChange={(event) => {
@@ -714,7 +714,7 @@ export const AgentInspectPanel = ({
                 />
                 <input
                   type="time"
-                  className="h-10 w-full rounded-lg border border-border bg-card px-3 text-xs text-foreground outline-none"
+                  className="h-10 w-full rounded-md border border-border bg-card/75 px-3 text-xs text-foreground outline-none"
                   value={heartbeatActiveEnd}
                   disabled={heartbeatLoading || heartbeatSaving}
                   onChange={(event) => {
@@ -725,12 +725,12 @@ export const AgentInspectPanel = ({
                 />
               </div>
             ) : null}
-            <label className="mt-4 flex flex-col gap-2 text-xs font-semibold uppercase text-muted-foreground">
+            <label className="mt-4 flex flex-col gap-2 font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
               <span>ACK max chars</span>
               <input
                 type="number"
                 min={0}
-                className="h-10 w-full rounded-lg border border-border bg-card px-3 text-xs text-foreground outline-none"
+                className="h-10 w-full rounded-md border border-border bg-card/75 px-3 text-xs text-foreground outline-none"
                 value={heartbeatAckMaxChars}
                 disabled={heartbeatLoading || heartbeatSaving}
                 onChange={(event) => {
@@ -745,7 +745,7 @@ export const AgentInspectPanel = ({
                 {heartbeatDirty ? "Remember to save changes." : "Up to date."}
               </div>
               <button
-                className="rounded-lg border border-transparent bg-primary px-4 py-2 text-xs font-semibold uppercase text-primary-foreground disabled:cursor-not-allowed disabled:border-border disabled:bg-muted disabled:text-muted-foreground disabled:opacity-100"
+                className="rounded-md border border-transparent bg-primary px-4 py-2 font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-primary-foreground disabled:cursor-not-allowed disabled:border-border disabled:bg-muted disabled:text-muted-foreground disabled:opacity-100"
                 type="button"
                 disabled={heartbeatLoading || heartbeatSaving || !heartbeatDirty}
                 onClick={() => void saveHeartbeat()}
@@ -756,15 +756,15 @@ export const AgentInspectPanel = ({
           </div>
         </section>
 
-        <section className="rounded-lg border border-destructive/40 bg-destructive/5 p-4">
-          <div className="text-xs font-semibold uppercase tracking-wide text-destructive">
+        <section className="rounded-md border border-destructive/40 bg-destructive/5 p-4">
+          <div className="font-mono text-[10px] font-semibold uppercase tracking-[0.16em] text-destructive">
             Delete agent
           </div>
           <div className="mt-3 text-[11px] text-muted-foreground">
             Removes the agent from the gateway config.
           </div>
           <button
-            className="mt-3 w-full rounded-lg border border-destructive bg-destructive px-3 py-2 text-xs font-semibold text-destructive-foreground shadow-sm transition hover:brightness-105"
+            className="mt-3 w-full rounded-md border border-destructive bg-destructive px-3 py-2 font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-destructive-foreground shadow-sm transition hover:brightness-105"
             type="button"
             onClick={onDelete}
           >

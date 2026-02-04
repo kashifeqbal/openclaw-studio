@@ -27,21 +27,27 @@ export const HeaderBar = ({
   onConnectionSettings,
 }: HeaderBarProps) => {
   return (
-    <div className="glass-panel px-6 py-4">
-      <div className="grid items-center gap-4 lg:grid-cols-[minmax(0,1fr)_auto]">
+    <div className="glass-panel fade-up relative overflow-hidden px-4 py-4 sm:px-6">
+      <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(120deg,transparent_0%,color-mix(in_oklch,var(--primary)_14%,transparent)_48%,transparent_100%)] opacity-70" />
+      <div className="relative grid items-center gap-4 lg:grid-cols-[minmax(0,1fr)_auto]">
         <div className="min-w-0">
-          <p className="truncate text-sm font-semibold text-foreground">
+          <p className="console-title text-2xl leading-none text-foreground sm:text-3xl">
+            OpenClaw Studio
+          </p>
+          <p className="mt-1 truncate text-xs font-semibold uppercase tracking-widest text-muted-foreground">
             Agents ({agentCount})
           </p>
           {gatewayUrl ? (
-            <p className="truncate text-xs text-muted-foreground">{gatewayUrl}</p>
+            <p className="mt-1 truncate font-mono text-[11px] text-muted-foreground/90">
+              {gatewayUrl}
+            </p>
           ) : null}
         </div>
 
         <div className="flex flex-col items-end gap-2">
-          <div className="inline-flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-1 text-xs font-semibold uppercase text-muted-foreground">
+          <div className="inline-flex items-center gap-2 rounded-md border border-border/80 bg-card/70 px-3 py-1 font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
             <span
-              className={`h-2 w-2 rounded-full ${statusDotStyles[status]}`}
+              className={`status-ping h-2 w-2 rounded-full ${statusDotStyles[status]}`}
               aria-hidden="true"
             />
             {statusLabel[status]}
@@ -49,7 +55,7 @@ export const HeaderBar = ({
           <div className="flex items-center gap-2">
             <ThemeToggle />
             <button
-              className="rounded-lg border border-input bg-background px-4 py-2 text-sm font-semibold text-foreground transition hover:border-ring"
+              className="rounded-md border border-input/90 bg-background/75 px-4 py-2 text-xs font-semibold uppercase tracking-[0.12em] text-foreground transition hover:border-ring hover:bg-card"
               type="button"
               onClick={onConnectionSettings}
               data-testid="gateway-settings-toggle"

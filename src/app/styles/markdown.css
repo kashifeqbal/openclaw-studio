@@ -2,6 +2,7 @@
   display: block;
   white-space: pre-wrap;
   word-break: break-word;
+  line-height: 1.48;
 }
 
 .agent-markdown p {
@@ -59,16 +60,18 @@
 .agent-markdown code {
   font-family: var(--font-mono), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
     "Liberation Mono", "Courier New", monospace;
-  font-size: 0.85em;
-  background: var(--muted);
-  padding: 0.1rem 0.25rem;
-  border-radius: 0.25rem;
+  font-size: 0.82em;
+  background: color-mix(in oklch, var(--muted) 85%, transparent);
+  padding: 0.14rem 0.28rem;
+  border-radius: 0.32rem;
+  border: 1px solid color-mix(in oklch, var(--border) 75%, transparent);
 }
 
 .agent-markdown pre {
-  background: var(--muted);
-  border-radius: 0.5rem;
-  padding: 0.6rem 0.75rem;
+  background: color-mix(in oklch, var(--card) 75%, var(--muted));
+  border-radius: 0.58rem;
+  padding: 0.66rem 0.78rem;
+  border: 1px solid color-mix(in oklch, var(--border) 72%, transparent);
   overflow-x: auto;
 }
 
@@ -79,8 +82,8 @@
 }
 
 .agent-markdown blockquote {
-  border-left: 3px solid var(--border);
-  padding-left: 0.75rem;
+  border-left: 3px solid color-mix(in oklch, var(--primary) 44%, var(--border));
+  padding-left: 0.7rem;
   color: var(--muted-foreground);
 }
 
@@ -98,6 +101,8 @@
 }
 
 .agent-markdown a {
-  color: var(--primary);
+  color: color-mix(in oklch, var(--primary) 85%, var(--foreground));
   text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
 }
