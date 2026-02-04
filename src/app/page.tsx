@@ -817,7 +817,7 @@ const AgentStudioPage = () => {
   }, [buildAllowedModelKeys, client, status]);
 
   const loadSummarySnapshot = useCallback(async () => {
-    const activeAgents = stateRef.current.agents;
+    const activeAgents = stateRef.current.agents.filter((agent) => agent.sessionCreated);
     const sessionKeys = Array.from(
       new Set(
         activeAgents
@@ -945,7 +945,7 @@ const AgentStudioPage = () => {
     async (agentId: string) => {
       const agent = stateRef.current.agents.find((entry) => entry.agentId === agentId);
       const sessionKey = agent?.sessionKey?.trim();
-      if (!agent || !sessionKey) return;
+      if (!agent || !agent.sessionCreated || !sessionKey) return;
       if (historyInFlightRef.current.has(sessionKey)) return;
 
       historyInFlightRef.current.add(sessionKey);
@@ -1046,19 +1046,6 @@ const AgentStudioPage = () => {
     [agents, client, loadAgents, setError]
   );
 
-  const shouldAutoLoadHistory = useCallback((agent: AgentState) => {
-    if (!agent.sessionKey?.trim()) return false;
-    return !agent.historyLoadedAt;
-  }, []);
-
-  useEffect(() => {
-    if (status !== "connected") return;
-    for (const agent of agents) {
-      if (!shouldAutoLoadHistory(agent)) continue;
-      void loadAgentHistory(agent.agentId);
-    }
-  }, [agents, loadAgentHistory, shouldAutoLoadHistory, status]);
-
   useEffect(() => {
     if (status !== "connected") return;
     const hasRunning = agents.some((agent) => agent.status === "running");
@@ -1123,16 +1110,18 @@ const AgentStudioPage = () => {
         if (!sessionKey) {
           throw new Error("Missing session key for agent.");
         }
+        let createdSession = agent.sessionCreated;
         if (!agent.sessionSettingsSynced) {
           await client.call("sessions.patch", {
             key: sessionKey,
             model: agent.model ?? null,
             thinkingLevel: agent.thinkingLevel ?? null,
           });
+          createdSession = true;
           dispatch({
             type: "updateAgent",
             agentId,
-            patch: { sessionSettingsSynced: true },
+            patch: { sessionSettingsSynced: true, sessionCreated: true },
           });
         }
         await client.call("chat.send", {
@@ -1141,6 +1130,13 @@ const AgentStudioPage = () => {
           deliver: false,
           idempotencyKey: runId,
         });
+        if (!createdSession) {
+          dispatch({
+            type: "updateAgent",
+            agentId,
+            patch: { sessionCreated: true },
+          });
+        }
       } catch (err) {
         const msg = err instanceof Error ? err.message : "Gateway error";
         dispatch({
@@ -1165,6 +1161,8 @@ const AgentStudioPage = () => {
         agentId,
         patch: { model: value, sessionSettingsSynced: false },
       });
+      const agent = agents.find((entry) => entry.agentId === agentId);
+      if (!agent?.sessionCreated) return;
       try {
         await client.call("sessions.patch", {
           key: sessionKey,
@@ -1184,7 +1182,7 @@ const AgentStudioPage = () => {
         });
       }
     },
-    [client, dispatch]
+    [agents, client, dispatch]
   );
 
   const handleThinkingChange = useCallback(
@@ -1194,6 +1192,8 @@ const AgentStudioPage = () => {
         agentId,
         patch: { thinkingLevel: value, sessionSettingsSynced: false },
       });
+      const agent = agents.find((entry) => entry.agentId === agentId);
+      if (!agent?.sessionCreated) return;
       try {
         await client.call("sessions.patch", {
           key: sessionKey,
@@ -1213,7 +1213,7 @@ const AgentStudioPage = () => {
         });
       }
     },
-    [client, dispatch]
+    [agents, client, dispatch]
   );
 
 
@@ -1255,7 +1255,7 @@ const AgentStudioPage = () => {
         dispatch({
           type: "updateAgent",
           agentId,
-          patch: summaryPatch,
+          patch: { ...summaryPatch, sessionCreated: true },
         });
       }
       const role =
@@ -1467,6 +1467,7 @@ const AgentStudioPage = () => {
           status: "running",
           runId: payload.runId,
           lastActivityAt: Date.now(),
+          sessionCreated: true,
         };
         if (liveThinking) {
           patch.thinkingTrace = liveThinking;
@@ -1562,6 +1563,7 @@ const AgentStudioPage = () => {
             status: "running",
             runId: payload.runId,
             lastActivityAt: summaryPatch.lastActivityAt ?? null,
+            sessionCreated: true,
           },
         });
         return;

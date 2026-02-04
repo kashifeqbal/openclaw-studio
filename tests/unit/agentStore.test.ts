@@ -23,7 +23,30 @@ describe("agent store", () => {
     expect(next.selectedAgentId).toBe("agent-1");
     expect(next.agents).toHaveLength(1);
     expect(next.agents[0].status).toBe("idle");
+    expect(next.agents[0].sessionCreated).toBe(false);
     expect(next.agents[0].outputLines).toEqual([]);
+  });
+
+  it("preserves_session_created_state_across_hydration", () => {
+    const seed: AgentStoreSeed = {
+      agentId: "agent-1",
+      name: "Agent One",
+      sessionKey: "agent:agent-1:main",
+    };
+    let state = agentStoreReducer(initialAgentStoreState, {
+      type: "hydrateAgents",
+      agents: [seed],
+    });
+    state = agentStoreReducer(state, {
+      type: "updateAgent",
+      agentId: "agent-1",
+      patch: { sessionCreated: true },
+    });
+    state = agentStoreReducer(state, {
+      type: "hydrateAgents",
+      agents: [seed],
+    });
+    expect(state.agents[0]?.sessionCreated).toBe(true);
   });
 
   it("tracks_unseen_activity_for_non_selected_agents", () => {

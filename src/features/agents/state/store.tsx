@@ -27,6 +27,7 @@ export type AgentStoreSeed = {
 
 export type AgentState = AgentStoreSeed & {
   status: AgentStatus;
+  sessionCreated: boolean;
   awaitingUserInput: boolean;
   hasUnseenActivity: boolean;
   outputLines: string[];
@@ -82,6 +83,7 @@ const createRuntimeAgentState = (
     model: seed.model ?? existing?.model ?? null,
     thinkingLevel: seed.thinkingLevel ?? existing?.thinkingLevel ?? "medium",
     status: existing?.status ?? "idle",
+    sessionCreated: existing?.sessionCreated ?? false,
     awaitingUserInput: existing?.awaitingUserInput ?? false,
     hasUnseenActivity: existing?.hasUnseenActivity ?? false,
     outputLines: existing?.outputLines ?? [],
