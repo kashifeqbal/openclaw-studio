@@ -32,7 +32,7 @@ This keeps feature cohesion high while preserving a clear client/server boundary
 - **Studio settings** (`src/lib/studio`, `src/app/api/studio`): local settings store for gateway URL/token and focused preferences (`src/lib/studio/settings.ts`, `src/lib/studio/settings.server.ts`, `src/app/api/studio/route.ts`). `src/lib/studio/client.ts` and `src/lib/studio/coordinator.ts` provide shared client-side load/patch scheduling for gateway, focused, and studio-session settings.
 - **Gateway** (`src/lib/gateway`): WebSocket client for agent runtime (frames, connect, request/response). The OpenClaw control UI client is vendored in `src/lib/gateway/openclaw/GatewayBrowserClient.ts` with a sync script at `scripts/sync-openclaw-gateway-client.ts`.
 - **Gateway-backed config + agent-file edits** (`src/lib/gateway/agentConfig.ts`, `src/lib/gateway/tools.ts`, `src/app/api/gateway/tools/route.ts`): agent rename/heartbeat via `config.get` + `config.patch`, agent file read/write via `/tools/invoke` proxy.
-- **Local OpenClaw config + paths** (`src/lib/clawdbot`): state/config/.env path resolution with `OPENCLAW_*` env overrides (`src/lib/clawdbot/paths.ts`). Local config access is used for optional Discord provisioning and local path/config helpers; gateway URL/token in Studio are sourced from studio settings.
+- **Local OpenClaw config + paths** (`src/lib/clawdbot`): state/config/.env path resolution with `OPENCLAW_*` env overrides (`src/lib/clawdbot/paths.ts`). Local config access is used for optional Discord provisioning and local path/config helpers; shared local config list helpers live in `src/lib/clawdbot/config.ts` and are reused by Discord provisioning. Gateway URL/token in Studio are sourced from studio settings.
 - **Discord integration** (`src/lib/discord`, API route): channel provisioning and config binding (local gateway only).
 - **Shared utilities** (`src/lib/*`): env, ids, names, avatars, text parsing, logging, filesystem helpers.
 
@@ -98,6 +98,7 @@ Flow:
 - **WebSocket gateway direct to client**: lowest latency for streaming; trade-off is tighter coupling to the gateway protocol in the UI.
 - **Gateway-first agent records**: records map 1:1 to `agents.list` entries with main sessions; trade-off is no local-only agent concept.
 - **Gateway-backed config + agent-file edits**: rename/heartbeat via `config.patch`, agent files via `/tools/invoke`; trade-off is reliance on gateway availability and tool allowlists.
+- **Narrow local config mutation boundary**: local `openclaw.json` writes are limited to explicit local-only flows (currently Discord provisioning), and reuse shared list helpers instead of ad-hoc mutation paths; trade-off is less flexibility for local-only experimentation, but clearer ownership and lower drift risk.
 - **Single gateway settings endpoint**: `/api/studio` is the sole Studio gateway URL/token source; trade-off is migration pressure on any older local-config-based callers, but it removes ambiguous ownership and dead paths.
 - **Shared client settings coordinator**: one coordinator now owns `/api/studio` load/schedule/flush behavior for gateway + focused + session state; trade-off is introducing a central client singleton, but it removes duplicate timers/fetch paths and reduces persistence races.
 - **Vendored gateway client + sync script**: reduces drift from upstream OpenClaw UI; trade-off is maintaining a sync path and local copies of upstream helpers.
@@ -150,6 +151,7 @@ C4Container
 - Do not write agent rename/heartbeat data directly to `openclaw.json`; use gateway `config.patch`.
 - Do not read/write agent files on the local filesystem; use the gateway tools proxy.
 - Do not add parallel gateway settings endpoints; `/api/studio` is the only supported Studio gateway URL/token path.
+- Do not add new generic local `openclaw.json` mutation wrappers for runtime agent-management flows; keep local writes constrained to explicit local-only integrations (for example, Discord provisioning).
 - Do not store gateway tokens or secrets in client-side persistent storage.
 - Do not add new global mutable state outside `AgentStoreProvider` for agent UI data.
 - Do not silently swallow errors in API routes; always return actionable errors.
