@@ -38,6 +38,7 @@ export type AgentState = AgentStoreSeed & {
   thinkingTrace: string | null;
   latestOverride: string | null;
   latestOverrideKind: "heartbeat" | "cron" | null;
+  lastAssistantMessageAt: number | null;
   lastActivityAt: number | null;
   latestPreview: string | null;
   lastUserMessage: string | null;
@@ -94,6 +95,7 @@ const createRuntimeAgentState = (
     thinkingTrace: existing?.thinkingTrace ?? null,
     latestOverride: existing?.latestOverride ?? null,
     latestOverrideKind: existing?.latestOverrideKind ?? null,
+    lastAssistantMessageAt: existing?.lastAssistantMessageAt ?? null,
     lastActivityAt: existing?.lastActivityAt ?? null,
     latestPreview: existing?.latestPreview ?? null,
     lastUserMessage: existing?.lastUserMessage ?? null,
@@ -257,14 +259,23 @@ export const getAttentionForAgent = (
 };
 
 export const getFilteredAgents = (state: AgentStoreState, filter: FocusFilter): AgentState[] => {
-  if (filter === "all") return state.agents;
+  const byMostRecentAssistant = (agents: AgentState[]) =>
+    [...agents].sort((a, b) => {
+      const aTs = a.lastAssistantMessageAt ?? 0;
+      const bTs = b.lastAssistantMessageAt ?? 0;
+      if (aTs !== bTs) return bTs - aTs;
+      return 0;
+    });
+  if (filter === "all") return byMostRecentAssistant(state.agents);
   if (filter === "running") {
-    return state.agents.filter((agent) => agent.status === "running");
+    return byMostRecentAssistant(state.agents.filter((agent) => agent.status === "running"));
   }
   if (filter === "idle") {
-    return state.agents.filter((agent) => agent.status === "idle");
+    return byMostRecentAssistant(state.agents.filter((agent) => agent.status === "idle"));
   }
-  return state.agents.filter(
-    (agent) => getAttentionForAgent(agent, state.selectedAgentId) === "needs-attention"
+  return byMostRecentAssistant(
+    state.agents.filter(
+      (agent) => getAttentionForAgent(agent, state.selectedAgentId) === "needs-attention"
+    )
   );
 };

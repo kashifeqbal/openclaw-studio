@@ -182,4 +182,54 @@ describe("agent store", () => {
     expect(after?.hasUnseenActivity).toBe(false);
     expect(getAttentionForAgent(after!, state.selectedAgentId)).toBe("normal");
   });
+
+  it("sorts_filtered_agents_by_latest_assistant_message", () => {
+    const seeds: AgentStoreSeed[] = [
+      {
+        agentId: "agent-1",
+        name: "Agent One",
+        sessionKey: "agent:agent-1:main",
+      },
+      {
+        agentId: "agent-2",
+        name: "Agent Two",
+        sessionKey: "agent:agent-2:main",
+      },
+      {
+        agentId: "agent-3",
+        name: "Agent Three",
+        sessionKey: "agent:agent-3:main",
+      },
+    ];
+    let state = agentStoreReducer(initialAgentStoreState, {
+      type: "hydrateAgents",
+      agents: seeds,
+    });
+    state = agentStoreReducer(state, {
+      type: "updateAgent",
+      agentId: "agent-1",
+      patch: { status: "running", lastAssistantMessageAt: 200 },
+    });
+    state = agentStoreReducer(state, {
+      type: "updateAgent",
+      agentId: "agent-2",
+      patch: { status: "running", lastAssistantMessageAt: 500 },
+    });
+    state = agentStoreReducer(state, {
+      type: "updateAgent",
+      agentId: "agent-3",
+      patch: { status: "running", lastAssistantMessageAt: 300 },
+    });
+
+    expect(getFilteredAgents(state, "all").map((agent) => agent.agentId)).toEqual([
+      "agent-2",
+      "agent-3",
+      "agent-1",
+    ]);
+    expect(getFilteredAgents(state, "running").map((agent) => agent.agentId)).toEqual([
+      "agent-2",
+      "agent-3",
+      "agent-1",
+    ]);
+  });
 });

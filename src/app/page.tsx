@@ -44,7 +44,6 @@ import {
   shouldPublishAssistantStream,
 } from "@/features/agents/state/runtimeEventBridge";
 import { fetchCronJobs } from "@/lib/cron/client";
-import { createRandomAgentName, normalizeAgentName } from "@/lib/names/agentNames";
 import type { AgentStoreSeed, AgentState } from "@/features/agents/state/store";
 import type { CronJobSummary } from "@/lib/cron/types";
 import { logger } from "@/lib/logger";
@@ -99,6 +98,7 @@ type AgentsListResult = {
 type SessionPreviewItem = {
   role: "user" | "assistant" | "tool" | "system" | "other";
   text: string;
+  timestamp?: number | string;
 };
 
 type SessionsPreviewEntry = {
@@ -178,9 +178,29 @@ const buildCronDisplay = (job: CronJobSummary) => {
   return lines.join("\n");
 };
 
+const toTimestampMs = (value: unknown): number | null => {
+  if (typeof value === "number" && Number.isFinite(value) && value > 0) {
+    return value;
+  }
+  if (typeof value === "string") {
+    const parsed = Date.parse(value);
+    if (Number.isFinite(parsed) && parsed > 0) return parsed;
+  }
+  return null;
+};
+
+const extractMessageTimestamp = (message: unknown): number | null => {
+  if (!message || typeof message !== "object") return null;
+  const record = message as Record<string, unknown>;
+  return (
+    toTimestampMs(record.timestamp) ?? toTimestampMs(record.createdAt) ?? toTimestampMs(record.at)
+  );
+};
+
 const buildHistoryLines = (messages: ChatHistoryMessage[]) => {
   const lines: string[] = [];
   let lastAssistant: string | null = null;
+  let lastAssistantAt: number | null = null;
   let lastRole: string | null = null;
   let lastUser: string | null = null;
   for (const message of messages) {
@@ -201,6 +221,10 @@ const buildHistoryLines = (messages: ChatHistoryMessage[]) => {
       }
       lastRole = "user";
     } else if (role === "assistant") {
+      const at = extractMessageTimestamp(message);
+      if (typeof at === "number") {
+        lastAssistantAt = at;
+      }
       if (thinking) {
         lines.push(thinking);
       }
@@ -223,7 +247,7 @@ const buildHistoryLines = (messages: ChatHistoryMessage[]) => {
     if (deduped[deduped.length - 1] === line) continue;
     deduped.push(line);
   }
-  return { lines: deduped, lastAssistant, lastRole, lastUser };
+  return { lines: deduped, lastAssistant, lastAssistantAt, lastRole, lastUser };
 };
 
 const extractReasoningBody = (value: string): string | null => {
@@ -961,6 +985,15 @@ const AgentStudioPage = () => {
         }
         const preview = previewMap.get(agent.sessionKey);
         if (preview?.items?.length) {
+          const latestItem = preview.items[preview.items.length - 1];
+          if (latestItem?.role === "assistant") {
+            const previewTs = toTimestampMs(latestItem.timestamp);
+            if (typeof previewTs === "number") {
+              patch.lastAssistantMessageAt = previewTs;
+            } else if (typeof activity === "number") {
+              patch.lastAssistantMessageAt = activity;
+            }
+          }
           const lastAssistant = [...preview.items]
             .reverse()
             .find((item) => item.role === "assistant");
@@ -1057,7 +1090,7 @@ const AgentStudioPage = () => {
           sessionKey,
           limit: 200,
         });
-        const { lines, lastAssistant, lastRole, lastUser } = buildHistoryLines(
+        const { lines, lastAssistant, lastAssistantAt, lastRole, lastUser } = buildHistoryLines(
           result.messages ?? []
         );
         if (lines.length === 0) {
@@ -1075,6 +1108,9 @@ const AgentStudioPage = () => {
           mergedLines.every((line, index) => line === currentLines[index]);
         if (isSame) {
           const patch: Partial<AgentState> = { historyLoadedAt: loadedAt };
+          if (typeof lastAssistantAt === "number") {
+            patch.lastAssistantMessageAt = lastAssistantAt;
+          }
           if (!agent.runId && agent.status === "running" && lastRole === "assistant") {
             patch.status = "idle";
             patch.runId = null;
@@ -1092,6 +1128,9 @@ const AgentStudioPage = () => {
           outputLines: mergedLines,
           lastResult: lastAssistant ?? null,
           ...(lastAssistant ? { latestPreview: lastAssistant } : {}),
+          ...(typeof lastAssistantAt === "number"
+            ? { lastAssistantMessageAt: lastAssistantAt }
+            : {}),
           ...(lastUser ? { lastUserMessage: lastUser } : {}),
           historyLoadedAt: loadedAt,
         };
@@ -1360,18 +1399,23 @@ const AgentStudioPage = () => {
         const agentId = findAgentBySessionKey(state.agents, payload.sessionKey);
         if (!agentId) return;
         const agent = state.agents.find((entry) => entry.agentId === agentId);
-        const summaryPatch = getChatSummaryPatch(payload);
-        if (summaryPatch) {
-          dispatch({
-            type: "updateAgent",
-            agentId,
-            patch: { ...summaryPatch, sessionCreated: true },
-          });
-        }
         const role =
           payload.message && typeof payload.message === "object"
             ? (payload.message as Record<string, unknown>).role
             : null;
+        const summaryPatch = getChatSummaryPatch(payload);
+        if (summaryPatch) {
+          const assistantAt = role === "assistant" ? extractMessageTimestamp(payload.message) : null;
+          dispatch({
+            type: "updateAgent",
+            agentId,
+            patch: {
+              ...summaryPatch,
+              ...(typeof assistantAt === "number" ? { lastAssistantMessageAt: assistantAt } : {}),
+              sessionCreated: true,
+            },
+          });
+        }
         if (role === "user") {
           return;
         }
@@ -1700,15 +1744,6 @@ const AgentStudioPage = () => {
     [dispatch]
   );
 
-  const handleNameShuffle = useCallback(
-    async (agentId: string) => {
-      const name = normalizeAgentName(createRandomAgentName());
-      if (!name) return;
-      await handleRenameAgent(agentId, name);
-    },
-    [handleRenameAgent]
-  );
-
   const handleDraftChange = useCallback(
     (agentId: string, value: string) => {
       dispatch({
@@ -1803,7 +1838,6 @@ const AgentStudioPage = () => {
                     )
                   }
                   onAvatarShuffle={() => handleAvatarShuffle(focusedAgent.agentId)}
-                  onNameShuffle={() => handleNameShuffle(focusedAgent.agentId)}
                 />
               ) : (
                 <div className="flex h-full items-center justify-center rounded-md border border-border/80 bg-card/70 p-6 text-sm text-muted-foreground">

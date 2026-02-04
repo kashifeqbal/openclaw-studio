@@ -16,7 +16,6 @@ type AgentChatPanelProps = {
   onDraftChange: (value: string) => void;
   onSend: (message: string) => void;
   onAvatarShuffle: () => void;
-  onNameShuffle: () => void;
 };
 
 export const AgentChatPanel = ({
@@ -28,7 +27,6 @@ export const AgentChatPanel = ({
   onDraftChange,
   onSend,
   onAvatarShuffle,
-  onNameShuffle,
 }: AgentChatPanelProps) => {
   const [nameDraft, setNameDraft] = useState(agent.name);
   const [draftValue, setDraftValue] = useState(agent.draft);
@@ -163,19 +161,6 @@ export const AgentChatPanel = ({
                     }
                   }}
                 />
-                <button
-                  className="nodrag flex h-6 w-6 items-center justify-center rounded-md border border-border/80 bg-card text-muted-foreground transition hover:border-border hover:bg-muted/65"
-                  type="button"
-                  aria-label="Shuffle name"
-                  data-testid="agent-name-shuffle"
-                  onClick={(event) => {
-                    event.preventDefault();
-                    event.stopPropagation();
-                    onNameShuffle();
-                  }}
-                >
-                  <Shuffle className="h-3 w-3" />
-                </button>
               </div>
               <div className="flex flex-wrap items-center gap-2">
                 <span
