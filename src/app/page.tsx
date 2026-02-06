@@ -2345,6 +2345,7 @@ const AgentStudioPage = () => {
                 className={`${mobilePane === "brain" ? "block" : "hidden"} glass-panel min-h-0 w-full shrink-0 overflow-hidden p-0 xl:block xl:min-w-[360px] xl:max-w-[430px]`}
               >
                 <AgentBrainPanel
+                  client={client}
                   agents={agents}
                   selectedAgentId={selectedBrainAgentId}
                   onClose={() => {

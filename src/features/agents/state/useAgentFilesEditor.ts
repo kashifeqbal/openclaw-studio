@@ -5,21 +5,9 @@ import {
   isAgentFileName,
   type AgentFileName,
 } from "@/lib/agents/agentFiles";
-import { fetchJson } from "@/lib/http";
+import type { GatewayClient } from "@/lib/gateway/GatewayClient";
 
 type AgentFilesState = ReturnType<typeof createAgentFilesState>;
-
-type GatewayToolInvokePayload = {
-  tool: string;
-  sessionKey?: string;
-  action?: string;
-  args?: Record<string, unknown>;
-  dryRun?: boolean;
-};
-
-type GatewayToolInvokeResult =
-  | { ok: true; result: unknown }
-  | { ok: false; error: string };
 
 type UseAgentFilesEditorResult = {
   agentFiles: AgentFilesState;
@@ -33,45 +21,15 @@ type UseAgentFilesEditorResult = {
   saveAgentFiles: () => Promise<boolean>;
 };
 
-const extractToolText = (result: unknown) => {
-  if (!result || typeof result !== "object") return "";
-  const record = result as Record<string, unknown>;
-  if (typeof record.text === "string") return record.text;
-  const content = record.content;
-  if (!Array.isArray(content)) return "";
-  const blocks = content
-    .map((item) => {
-      if (!item || typeof item !== "object") return null;
-      const block = item as Record<string, unknown>;
-      if (block.type !== "text" || typeof block.text !== "string") return null;
-      return block.text;
-    })
-    .filter((text): text is string => Boolean(text));
-  return blocks.join("");
+type AgentsFilesGetResponse = {
+  file?: { name?: unknown; missing?: unknown; content?: unknown };
 };
 
-const isMissingFileError = (message: string) => /no such file|enoent/i.test(message);
-
-const callAgentTool = async (
-  payload: GatewayToolInvokePayload
-): Promise<GatewayToolInvokeResult> => {
-  try {
-    const data = await fetchJson<unknown>("/api/gateway/tools", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-    if (!data || typeof data !== "object" || !("ok" in data)) {
-      return { ok: false, error: "Invalid gateway tool response." };
-    }
-    return data as GatewayToolInvokeResult;
-  } catch (err) {
-    const message = err instanceof Error ? err.message : "Failed to invoke gateway tool.";
-    return { ok: false, error: message };
-  }
-};
-
-export const useAgentFilesEditor = (sessionKey: string | null | undefined): UseAgentFilesEditorResult => {
+export const useAgentFilesEditor = (params: {
+  client: GatewayClient | null | undefined;
+  agentId: string | null | undefined;
+}): UseAgentFilesEditorResult => {
+  const { client, agentId } = params;
   const [agentFiles, setAgentFiles] = useState(createAgentFilesState);
   const [agentFileTab, setAgentFileTab] = useState<AgentFileName>(AGENT_FILE_NAMES[0]);
   const [agentFilesLoading, setAgentFilesLoading] = useState(false);
@@ -83,31 +41,35 @@ export const useAgentFilesEditor = (sessionKey: string | null | undefined): UseA
     setAgentFilesLoading(true);
     setAgentFilesError(null);
     try {
-      const trimmedSessionKey = sessionKey?.trim();
-      if (!trimmedSessionKey) {
+      const trimmedAgentId = agentId?.trim();
+      if (!trimmedAgentId) {
         setAgentFiles(createAgentFilesState());
         setAgentFilesDirty(false);
-        setAgentFilesError("Session key is missing for this agent.");
+        setAgentFilesError("Agent ID is missing for this agent.");
+        return;
+      }
+      if (!client) {
+        setAgentFilesError("Gateway client is not available.");
         return;
       }
       const results = await Promise.all(
         AGENT_FILE_NAMES.map(async (name) => {
-          const response = await callAgentTool({
-            tool: "read",
-            sessionKey: trimmedSessionKey,
-            args: { path: name },
-          });
-          if (!response.ok) {
-            if (isMissingFileError(response.error)) {
-              return { name, content: "", exists: false };
-            }
-            throw new Error(response.error);
-          }
-          return {
+          const response = await client.call<AgentsFilesGetResponse>("agents.files.get", {
+            agentId: trimmedAgentId,
             name,
-            content: extractToolText(response.result),
-            exists: true,
-          };
+          });
+          const file = response?.file;
+          const fileRecord =
+            file && typeof file === "object" ? (file as Record<string, unknown>) : null;
+          const missing = fileRecord?.missing === true;
+          const content =
+            fileRecord && typeof fileRecord.content === "string"
+              ? fileRecord.content
+              : "";
+          if (missing) {
+            return { name, content: "", exists: false };
+          }
+          return { name, content, exists: true };
         })
       );
       const nextState = createAgentFilesState();
@@ -126,27 +88,28 @@ export const useAgentFilesEditor = (sessionKey: string | null | undefined): UseA
     } finally {
       setAgentFilesLoading(false);
     }
-  }, [sessionKey]);
+  }, [agentId, client]);
 
   const saveAgentFiles = useCallback(async () => {
     setAgentFilesSaving(true);
     setAgentFilesError(null);
     try {
-      const trimmedSessionKey = sessionKey?.trim();
-      if (!trimmedSessionKey) {
-        setAgentFilesError("Session key is missing for this agent.");
+      const trimmedAgentId = agentId?.trim();
+      if (!trimmedAgentId) {
+        setAgentFilesError("Agent ID is missing for this agent.");
+        return false;
+      }
+      if (!client) {
+        setAgentFilesError("Gateway client is not available.");
         return false;
       }
       await Promise.all(
         AGENT_FILE_NAMES.map(async (name) => {
-          const response = await callAgentTool({
-            tool: "write",
-            sessionKey: trimmedSessionKey,
-            args: { path: name, content: agentFiles[name].content },
+          await client.call("agents.files.set", {
+            agentId: trimmedAgentId,
+            name,
+            content: agentFiles[name].content,
           });
-          if (!response.ok) {
-            throw new Error(response.error);
-          }
         })
       );
       const nextState = createAgentFilesState();
@@ -166,7 +129,7 @@ export const useAgentFilesEditor = (sessionKey: string | null | undefined): UseA
     } finally {
       setAgentFilesSaving(false);
     }
-  }, [agentFiles, sessionKey]);
+  }, [agentFiles, agentId, client]);
 
   const handleAgentFileTabChange = useCallback(
     async (nextTab: AgentFileName) => {

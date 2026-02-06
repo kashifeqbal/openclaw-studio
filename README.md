@@ -54,12 +54,11 @@ cp .env.example .env
 
 ## Agent files
 
-Agent files live on the **gateway** and are accessed through `POST /tools/invoke`.
-The gateway build must expose the coding tools (`read`, `write`, `edit`, `apply_patch`) on that endpoint.
-If you see `Tool not available: read`, you are running a gateway build that does **not** include coding tools for `/tools/invoke`.
+Agent files live on the **gateway host** (per-agent workspace) and are managed through Gateway WebSocket methods:
 
-If you have restrictive tool allowlists configured, ensure the agent/tool policy permits:
-`read`, `write`, `edit`, and `apply_patch`.
+- `agents.files.list`
+- `agents.files.get`
+- `agents.files.set`
 
 ## Configuration
 
@@ -101,7 +100,7 @@ Run both OpenClaw Studio and OpenClaw inside the same WSL2 distro. Use the WSL s
 - **Missing config**: Run `openclaw onboard` or set `OPENCLAW_CONFIG_PATH`
 - **Gateway unreachable**: Confirm the gateway is running and `NEXT_PUBLIC_GATEWAY_URL` matches
 - **Auth errors**: Check `gateway.auth.token` in `openclaw.json`
-- **Inspect returns 404**: Your gateway build does not expose coding tools on `/tools/invoke`, or a tool allowlist is blocking them. Update the gateway build and ensure `read`/`write`/`edit`/`apply_patch` are allowed.
+- **Brain files fail to load**: Confirm Studio is connected, and your gateway supports `agents.files.get` / `agents.files.set` (update OpenClaw if those methods are missing).
 
 ## Architecture
 

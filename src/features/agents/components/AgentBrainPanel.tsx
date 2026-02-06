@@ -4,6 +4,7 @@ import { useCallback, useMemo, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import type { AgentState } from "@/features/agents/state/store";
+import type { GatewayClient } from "@/lib/gateway/GatewayClient";
 import {
   AGENT_FILE_META,
   AGENT_FILE_NAMES,
@@ -13,12 +14,14 @@ import {
 import { useAgentFilesEditor } from "@/features/agents/state/useAgentFilesEditor";
 
 type AgentBrainPanelProps = {
+  client: GatewayClient;
   agents: AgentState[];
   selectedAgentId: string | null;
   onClose: () => void;
 };
 
 export const AgentBrainPanel = ({
+  client,
   agents,
   selectedAgentId,
   onClose,
@@ -41,7 +44,7 @@ export const AgentBrainPanel = ({
     setAgentFileContent,
     handleAgentFileTabChange,
     saveAgentFiles,
-  } = useAgentFilesEditor(selectedAgent?.sessionKey ?? null);
+  } = useAgentFilesEditor({ client, agentId: selectedAgent?.agentId ?? null });
   const [previewMode, setPreviewMode] = useState(true);
 
   const handleTabChange = useCallback(
