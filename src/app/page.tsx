@@ -25,6 +25,7 @@ import {
 } from "@/lib/text/message-extract";
 import { useGatewayConnection } from "@/lib/gateway/useGatewayConnection";
 import type { EventFrame } from "@/lib/gateway/frames";
+import { createRafBatcher } from "@/lib/dom/rafBatcher";
 import {
   buildGatewayModelChoices,
   type GatewayModelChoice,
@@ -316,6 +317,10 @@ const AgentStudioPage = () => {
   const assistantStreamByRunRef = useRef<Map<string, string>>(new Map());
   const pendingDraftValuesRef = useRef<Map<string, string>>(new Map());
   const pendingDraftTimersRef = useRef<Map<string, number>>(new Map());
+  const pendingLivePatchesRef = useRef<Map<string, Partial<AgentState>>>(new Map());
+  const flushLivePatchesRef = useRef<() => void>(() => {});
+  const livePatchBatcherRef = useRef(createRafBatcher(() => flushLivePatchesRef.current()));
+  const lastActivityMarkRef = useRef<Map<string, number>>(new Map());
 
   const agents = state.agents;
   const selectedAgent = useMemo(() => getSelectedAgent(state), [state]);
@@ -330,6 +335,7 @@ const AgentStudioPage = () => {
       : null;
     return selectedInFilter ?? filteredAgents[0] ?? null;
   }, [filteredAgents, selectedAgent]);
+  const focusedAgentId = focusedAgent?.agentId ?? null;
   const settingsAgent = useMemo(() => {
     if (!settingsAgentId) return null;
     return agents.find((entry) => entry.agentId === settingsAgentId) ?? null;
@@ -394,6 +400,49 @@ const AgentStudioPage = () => {
       values.clear();
     };
   }, []);
+
+  useEffect(() => {
+    const batcher = livePatchBatcherRef.current;
+    const pending = pendingLivePatchesRef.current;
+    const activityMarks = lastActivityMarkRef.current;
+    return () => {
+      batcher.cancel();
+      pending.clear();
+      activityMarks.clear();
+    };
+  }, []);
+
+  const flushPendingLivePatches = useCallback(() => {
+    const pending = pendingLivePatchesRef.current;
+    if (pending.size === 0) return;
+    const entries = [...pending.entries()];
+    pending.clear();
+    for (const [agentId, patch] of entries) {
+      dispatch({ type: "updateAgent", agentId, patch });
+    }
+  }, [dispatch]);
+
+  useEffect(() => {
+    flushLivePatchesRef.current = flushPendingLivePatches;
+  }, [flushPendingLivePatches]);
+
+  const queueLivePatch = useCallback((agentId: string, patch: Partial<AgentState>) => {
+    const key = agentId.trim();
+    if (!key) return;
+    const existing = pendingLivePatchesRef.current.get(key);
+    pendingLivePatchesRef.current.set(key, existing ? { ...existing, ...patch } : patch);
+    livePatchBatcherRef.current.schedule();
+  }, []);
+
+  const markActivityThrottled = useCallback(
+    (agentId: string, at: number = Date.now()) => {
+      const lastAt = lastActivityMarkRef.current.get(agentId) ?? 0;
+      if (at - lastAt < 300) return;
+      lastActivityMarkRef.current.set(agentId, at);
+      dispatch({ type: "markActivity", agentId, at });
+    },
+    [dispatch]
+  );
 
   const enqueueConfigMutation = useCallback(
     (params: {
@@ -1581,22 +1630,19 @@ const AgentStudioPage = () => {
 
   useEffect(() => {
     if (status !== "connected") return;
-    const hasRunning = agents.some((agent) => agent.status === "running");
-    if (!hasRunning) return;
-    for (const agent of stateRef.current.agents) {
-      if (agent.status !== "running") continue;
-      void loadAgentHistory(agent.agentId);
-    }
+    if (!focusedAgentId) return;
+    const agent = stateRef.current.agents.find((entry) => entry.agentId === focusedAgentId);
+    if (!agent || agent.status !== "running") return;
+    void loadAgentHistory(focusedAgentId);
     const timer = window.setInterval(() => {
-      for (const agent of stateRef.current.agents) {
-        if (agent.status !== "running") continue;
-        void loadAgentHistory(agent.agentId);
-      }
-    }, 1500);
+      const latest = stateRef.current.agents.find((entry) => entry.agentId === focusedAgentId);
+      if (!latest || latest.status !== "running") return;
+      void loadAgentHistory(focusedAgentId);
+    }, 4500);
     return () => {
       window.clearInterval(timer);
     };
-  }, [agents, loadAgentHistory, status]);
+  }, [focusedAgentId, loadAgentHistory, status]);
 
   const handleSend = useCallback(
     async (agentId: string, sessionKey: string, message: string) => {
@@ -1825,10 +1871,7 @@ const AgentStudioPage = () => {
         if (role === "user" || role === "system") {
           return;
         }
-        dispatch({
-          type: "markActivity",
-          agentId,
-        });
+        markActivityThrottled(agentId);
         const nextTextRaw = extractText(payload.message);
         const nextText = nextTextRaw ? stripUiMetadata(nextTextRaw) : null;
         const nextThinking = extractThinking(payload.message ?? payload);
@@ -1839,24 +1882,17 @@ const AgentStudioPage = () => {
             return;
           }
           appendUniqueToolLines(agentId, payload.runId ?? null, toolLines);
+          const patch: Partial<AgentState> = {};
           if (nextThinking) {
-            dispatch({
-              type: "updateAgent",
-              agentId,
-              patch: { thinkingTrace: nextThinking, status: "running" },
-            });
+            patch.thinkingTrace = nextThinking;
+            patch.status = "running";
           }
           if (typeof nextText === "string") {
-            dispatch({
-              type: "setStream",
-              agentId,
-              value: nextText,
-            });
-            dispatch({
-              type: "updateAgent",
-              agentId,
-              patch: { status: "running" },
-            });
+            patch.streamText = nextText;
+            patch.status = "running";
+          }
+          if (Object.keys(patch).length > 0) {
+            queueLivePatch(agentId, patch);
           }
           return;
         }
@@ -1967,10 +2003,7 @@ const AgentStudioPage = () => {
       if (!match) return;
       const agent = state.agents.find((entry) => entry.agentId === match);
       if (!agent) return;
-      dispatch({
-        type: "markActivity",
-        agentId: match,
-      });
+      markActivityThrottled(match);
       const stream = typeof payload.stream === "string" ? payload.stream : "";
       const data =
         payload.data && typeof payload.data === "object"
@@ -1980,16 +2013,12 @@ const AgentStudioPage = () => {
       if (isReasoningRuntimeAgentStream(stream)) {
         const liveThinking = resolveThinkingFromAgentStream(data, "");
         if (liveThinking) {
-          dispatch({
-            type: "updateAgent",
-            agentId: match,
-            patch: {
-              status: "running",
-              runId: payload.runId,
-              sessionCreated: true,
-              lastActivityAt: Date.now(),
-              thinkingTrace: liveThinking,
-            },
+          queueLivePatch(match, {
+            status: "running",
+            runId: payload.runId,
+            sessionCreated: true,
+            lastActivityAt: Date.now(),
+            thinkingTrace: liveThinking,
           });
         }
         return;
@@ -2018,11 +2047,6 @@ const AgentStudioPage = () => {
         if (liveThinking) {
           patch.thinkingTrace = liveThinking;
         }
-        dispatch({
-          type: "updateAgent",
-          agentId: match,
-          patch,
-        });
         if (mergedRaw && (!rawText || !isUiMetadataPrefix(rawText.trim()))) {
           const visibleText = extractText({ role: "assistant", content: mergedRaw }) ?? mergedRaw;
           const cleaned = stripUiMetadata(visibleText);
@@ -2035,13 +2059,10 @@ const AgentStudioPage = () => {
               currentStreamText: agent.streamText ?? null,
             })
           ) {
-            dispatch({
-              type: "setStream",
-              agentId: match,
-              value: cleaned,
-            });
+            patch.streamText = cleaned;
           }
         }
+        queueLivePatch(match, patch);
         return;
       }
 
@@ -2147,6 +2168,8 @@ const AgentStudioPage = () => {
     dispatch,
     loadAgentHistory,
     loadSummarySnapshot,
+    markActivityThrottled,
+    queueLivePatch,
     refreshHeartbeatLatestUpdate,
     state.agents,
     status,
