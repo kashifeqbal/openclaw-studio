@@ -203,7 +203,8 @@ const extractReasoningBody = (value: string): string | null => {
 
 const resolveThinkingFromAgentStream = (
   data: Record<string, unknown> | null,
-  rawStream: string
+  rawStream: string,
+  opts?: { treatPlainTextAsThinking?: boolean }
 ): string | null => {
   if (data) {
     const extracted = extractThinking(data);
@@ -212,6 +213,12 @@ const resolveThinkingFromAgentStream = (
     const delta = typeof data.delta === "string" ? data.delta : "";
     const prefixed = extractReasoningBody(text) ?? extractReasoningBody(delta);
     if (prefixed) return prefixed;
+    if (opts?.treatPlainTextAsThinking) {
+      const cleanedDelta = delta.trim();
+      if (cleanedDelta) return cleanedDelta;
+      const cleanedText = text.trim();
+      if (cleanedText) return cleanedText;
+    }
   }
   const tagged = extractThinkingFromTaggedStream(rawStream);
   return tagged || null;
@@ -315,6 +322,7 @@ const AgentStudioPage = () => {
   const specialUpdateInFlightRef = useRef<Set<string>>(new Set());
   const toolLinesSeenRef = useRef<Map<string, Set<string>>>(new Map());
   const assistantStreamByRunRef = useRef<Map<string, string>>(new Map());
+  const thinkingStreamByRunRef = useRef<Map<string, string>>(new Map());
   const pendingDraftValuesRef = useRef<Map<string, string>>(new Map());
   const pendingDraftTimersRef = useRef<Map<string, number>>(new Map());
   const pendingLivePatchesRef = useRef<Map<string, Partial<AgentState>>>(new Map());
@@ -549,6 +557,7 @@ const AgentStudioPage = () => {
     if (!runId) return;
     chatRunSeenRef.current.delete(runId);
     assistantStreamByRunRef.current.delete(runId);
+    thinkingStreamByRunRef.current.delete(runId);
     toolLinesSeenRef.current.delete(runId);
   }, []);
 
@@ -2011,7 +2020,21 @@ const AgentStudioPage = () => {
           : null;
       const hasChatEvents = chatRunSeenRef.current.has(payload.runId);
       if (isReasoningRuntimeAgentStream(stream)) {
-        const liveThinking = resolveThinkingFromAgentStream(data, "");
+        const rawText = typeof data?.text === "string" ? (data.text as string) : "";
+        const rawDelta = typeof data?.delta === "string" ? (data.delta as string) : "";
+        const previousRaw = thinkingStreamByRunRef.current.get(payload.runId) ?? "";
+        let mergedRaw = previousRaw;
+        if (rawText) {
+          mergedRaw = rawText;
+        } else if (rawDelta) {
+          mergedRaw = mergeRuntimeStream(previousRaw, rawDelta);
+        }
+        if (mergedRaw) {
+          thinkingStreamByRunRef.current.set(payload.runId, mergedRaw);
+        }
+        const liveThinking =
+          resolveThinkingFromAgentStream(data, mergedRaw, { treatPlainTextAsThinking: true }) ??
+          (mergedRaw.trim() ? mergedRaw.trim() : null);
         if (liveThinking) {
           queueLivePatch(match, {
             status: "running",
