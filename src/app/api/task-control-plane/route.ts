@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import {
+  BEADS_WORKSPACE_NOT_INITIALIZED_ERROR_MESSAGE,
   createTaskControlPlaneBrRunner,
   isBeadsWorkspaceError,
 } from "@/lib/task-control-plane/br-runner";
@@ -42,7 +43,7 @@ export async function GET() {
     if (isBeadsWorkspaceError(message)) {
       return NextResponse.json(
         {
-          error: "Beads workspace not initialized for this project. Run: br init --prefix <scope>.",
+          error: BEADS_WORKSPACE_NOT_INITIALIZED_ERROR_MESSAGE,
         },
         { status: 400 }
       );

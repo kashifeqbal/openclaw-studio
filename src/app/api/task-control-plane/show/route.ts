@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 
 import {
+  BEADS_WORKSPACE_NOT_INITIALIZED_ERROR_MESSAGE,
+  coerceBrSingleRecord,
   createTaskControlPlaneBrRunner,
   isBeadsWorkspaceError,
 } from "@/lib/task-control-plane/br-runner";
@@ -21,20 +23,12 @@ const extractId = (request: Request): string => {
   return trimmed;
 };
 
-const coerceSingleRecord = (value: unknown, id: string): Record<string, unknown> => {
-  const record = Array.isArray(value) ? value[0] : value;
-  if (!record || typeof record !== "object" || Array.isArray(record)) {
-    throw new Error(`Unexpected br show --json output for ${id}.`);
-  }
-  return record as Record<string, unknown>;
-};
-
 export async function GET(request: Request) {
   try {
     const id = extractId(request);
     const runner = createTaskControlPlaneBrRunner();
     const raw = runner.runBrJson(["show", id]);
-    const bead = coerceSingleRecord(raw, id);
+    const bead = coerceBrSingleRecord(raw, { command: "show", id });
     return NextResponse.json({ bead });
   } catch (err) {
     const message =
@@ -45,7 +39,7 @@ export async function GET(request: Request) {
     if (isBeadsWorkspaceError(message)) {
       return NextResponse.json(
         {
-          error: "Beads workspace not initialized for this project. Run: br init --prefix <scope>.",
+          error: BEADS_WORKSPACE_NOT_INITIALIZED_ERROR_MESSAGE,
         },
         { status: 400 }
       );

@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 
 import {
+  BEADS_WORKSPACE_NOT_INITIALIZED_ERROR_MESSAGE,
+  coerceBrSingleRecord,
   createTaskControlPlaneBrRunner,
   isBeadsWorkspaceError,
 } from "@/lib/task-control-plane/br-runner";
@@ -30,14 +32,6 @@ const extractPayload = async (
   return { id, priority };
 };
 
-const coerceSingleRecord = (value: unknown, id: string): Record<string, unknown> => {
-  const record = Array.isArray(value) ? value[0] : value;
-  if (!record || typeof record !== "object" || Array.isArray(record)) {
-    throw new Error(`Unexpected br update --json output for ${id}.`);
-  }
-  return record as Record<string, unknown>;
-};
-
 export async function POST(request: Request) {
   try {
     const payload = await extractPayload(request);
@@ -48,7 +42,7 @@ export async function POST(request: Request) {
       String(payload.priority),
       payload.id,
     ]);
-    const bead = coerceSingleRecord(raw, payload.id);
+    const bead = coerceBrSingleRecord(raw, { command: "update", id: payload.id });
     return NextResponse.json({ bead });
   } catch (err) {
     const message =
@@ -64,7 +58,7 @@ export async function POST(request: Request) {
     if (isBeadsWorkspaceError(message)) {
       return NextResponse.json(
         {
-          error: "Beads workspace not initialized for this project. Run: br init --prefix <scope>.",
+          error: BEADS_WORKSPACE_NOT_INITIALIZED_ERROR_MESSAGE,
         },
         { status: 400 }
       );
@@ -72,4 +66,3 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: message }, { status: 502 });
   }
 }
-
