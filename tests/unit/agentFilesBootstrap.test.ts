@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { AGENT_FILE_NAMES } from "@/lib/agents/agentFiles";
-import { bootstrapAgentBrainFilesFromTemplate } from "@/lib/gateway/agentFilesBootstrap";
+import { bootstrapAgentBrainFilesFromTemplate } from "@/lib/gateway/agentFiles";
 import type { GatewayClient } from "@/lib/gateway/GatewayClient";
 
 type FilesByAgent = Record<string, Record<string, { content: string; missing?: boolean }>>;
@@ -112,4 +112,3 @@ describe("bootstrapAgentBrainFilesFromTemplate", () => {
     expect(filesByAgent["new-agent"]?.["TOOLS.md"]?.content).toBe("");
   });
 });
-

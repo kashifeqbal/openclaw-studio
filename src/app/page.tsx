@@ -91,7 +91,7 @@ import {
   syncGatewaySessionSettings,
 } from "@/lib/gateway/GatewayClient";
 import { fetchJson } from "@/lib/http";
-import { bootstrapAgentBrainFilesFromTemplate } from "@/lib/gateway/agentFilesBootstrap";
+import { bootstrapAgentBrainFilesFromTemplate } from "@/lib/gateway/agentFiles";
 
 type ChatHistoryMessage = Record<string, unknown>;
 
