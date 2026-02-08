@@ -29,6 +29,7 @@ import {
   buildGatewayModelChoices,
   type GatewayModelChoice,
   type GatewayModelPolicySnapshot,
+  resolveConfiguredModelKey,
 } from "@/lib/gateway/models";
 import {
   AgentStoreProvider,
@@ -136,6 +137,9 @@ type SessionsListEntry = {
   updatedAt?: number | null;
   displayName?: string;
   origin?: { label?: string | null; provider?: string | null } | null;
+  thinkingLevel?: string;
+  modelProvider?: string;
+  model?: string;
 };
 
 type SessionsListResult = {
@@ -296,6 +300,8 @@ const AgentStudioPage = () => {
   const summaryRefreshRef = useRef<number | null>(null);
   const [gatewayModels, setGatewayModels] = useState<GatewayModelChoice[]>([]);
   const [gatewayModelsError, setGatewayModelsError] = useState<string | null>(null);
+  const [gatewayConfigSnapshot, setGatewayConfigSnapshot] =
+    useState<GatewayModelPolicySnapshot | null>(null);
   const [createAgentBusy, setCreateAgentBusy] = useState(false);
   const [stopBusyAgentId, setStopBusyAgentId] = useState<string | null>(null);
   const [mobilePane, setMobilePane] = useState<MobilePane>("chat");
@@ -743,10 +749,51 @@ const AgentStudioPage = () => {
     []
   );
 
+  const resolveDefaultModelForAgent = useCallback(
+    (agentId: string, snapshot: GatewayModelPolicySnapshot | null): string | null => {
+      const resolvedAgentId = agentId.trim();
+      if (!resolvedAgentId) return null;
+      const defaults = snapshot?.config?.agents?.defaults;
+      const modelAliases = defaults?.models;
+      const agentEntry =
+        snapshot?.config?.agents?.list?.find((entry) => entry?.id?.trim() === resolvedAgentId) ??
+        null;
+      const agentModel = agentEntry?.model;
+      let raw: string | null = null;
+      if (typeof agentModel === "string") {
+        raw = agentModel;
+      } else if (agentModel && typeof agentModel === "object") {
+        raw = agentModel.primary ?? null;
+      }
+      if (!raw) {
+        const defaultModel = defaults?.model;
+        if (typeof defaultModel === "string") {
+          raw = defaultModel;
+        } else if (defaultModel && typeof defaultModel === "object") {
+          raw = defaultModel.primary ?? null;
+        }
+      }
+      if (!raw) return null;
+      return resolveConfiguredModelKey(raw, modelAliases);
+    },
+    []
+  );
+
   const loadAgents = useCallback(async () => {
     if (status !== "connected") return;
     setLoading(true);
     try {
+      let configSnapshot = gatewayConfigSnapshot;
+      if (!configSnapshot) {
+        try {
+          configSnapshot = await client.call<GatewayModelPolicySnapshot>("config.get", {});
+          setGatewayConfigSnapshot(configSnapshot);
+        } catch (err) {
+          if (!isGatewayDisconnectLikeError(err)) {
+            console.error("Failed to load gateway config while loading agents.", err);
+          }
+        }
+      }
       const gatewayKey = gatewayUrl.trim();
       let settings: Awaited<ReturnType<typeof settingsCoordinator.loadSettings>> | null = null;
       if (gatewayKey) {
@@ -757,64 +804,73 @@ const AgentStudioPage = () => {
         }
       }
       const agentsResult = await client.call<AgentsListResult>("agents.list", {});
-      const sessionKeysByAgent = new Map<string, Set<string>>();
+      const mainKey = agentsResult.mainKey?.trim() || "main";
+      const mainSessionKeyByAgent = new Map<string, SessionsListEntry | null>();
       await Promise.all(
         agentsResult.agents.map(async (agent) => {
           try {
+            const expectedMainKey = buildAgentMainSessionKey(agent.id, mainKey);
             const sessions = await client.call<SessionsListResult>("sessions.list", {
               agentId: agent.id,
               includeGlobal: false,
               includeUnknown: false,
-              limit: 64,
+              search: expectedMainKey,
+              limit: 4,
             });
             const entries = Array.isArray(sessions.sessions) ? sessions.sessions : [];
-            sessionKeysByAgent.set(
-              agent.id,
-              new Set(
-                entries
-                  .map((entry) => entry.key?.trim())
-                  .filter((key): key is string => Boolean(key))
-              )
-            );
+            const mainEntry =
+              entries.find((entry) => isSameSessionKey(entry.key ?? "", expectedMainKey)) ?? null;
+            mainSessionKeyByAgent.set(agent.id, mainEntry);
           } catch (err) {
             if (!isGatewayDisconnectLikeError(err)) {
               console.error("Failed to list sessions while resolving agent session.", err);
             }
-            sessionKeysByAgent.set(agent.id, new Set());
+            mainSessionKeyByAgent.set(agent.id, null);
           }
         })
       );
-      const mainKey = agentsResult.mainKey?.trim() || "main";
       const seeds: AgentStoreSeed[] = agentsResult.agents.map((agent) => {
         const persistedSeed =
           settings && gatewayKey ? resolveAgentAvatarSeed(settings, gatewayKey, agent.id) : null;
         const avatarSeed = persistedSeed ?? agent.id;
         const avatarUrl = resolveAgentAvatarUrl(agent);
         const name = resolveAgentName(agent);
+        const mainSession = mainSessionKeyByAgent.get(agent.id) ?? null;
+        const modelProvider =
+          typeof mainSession?.modelProvider === "string" ? mainSession.modelProvider.trim() : "";
+        const modelId = typeof mainSession?.model === "string" ? mainSession.model.trim() : "";
+        const model =
+          modelProvider && modelId
+            ? `${modelProvider}/${modelId}`
+            : resolveDefaultModelForAgent(agent.id, configSnapshot);
+        const thinkingLevel =
+          typeof mainSession?.thinkingLevel === "string" ? mainSession.thinkingLevel : null;
         return {
           agentId: agent.id,
           name,
           sessionKey: buildAgentMainSessionKey(agent.id, mainKey),
           avatarSeed,
           avatarUrl,
+          model,
+          thinkingLevel,
         };
       });
       hydrateAgents(seeds);
       for (const seed of seeds) {
-        const existingSessions = sessionKeysByAgent.get(seed.agentId);
-        if (!existingSessions?.has(seed.sessionKey)) continue;
+        const mainSession = mainSessionKeyByAgent.get(seed.agentId) ?? null;
+        if (!mainSession) continue;
         dispatch({
           type: "updateAgent",
           agentId: seed.agentId,
-          patch: { sessionCreated: true },
+          patch: { sessionCreated: true, sessionSettingsSynced: true },
         });
       }
 
       try {
         const activeAgents: SummarySnapshotAgent[] = [];
         for (const seed of seeds) {
-          const existingSessions = sessionKeysByAgent.get(seed.agentId);
-          if (!existingSessions?.has(seed.sessionKey)) continue;
+          const mainSession = mainSessionKeyByAgent.get(seed.agentId) ?? null;
+          if (!mainSession) continue;
           activeAgents.push({
             agentId: seed.agentId,
             sessionKey: seed.sessionKey,
@@ -886,9 +942,11 @@ const AgentStudioPage = () => {
     hydrateAgents,
     resolveAgentAvatarUrl,
     resolveAgentName,
+    resolveDefaultModelForAgent,
     setError,
     setLoading,
     gatewayUrl,
+    gatewayConfigSnapshot,
     settingsCoordinator,
     status,
   ]);
@@ -1079,6 +1137,7 @@ const AgentStudioPage = () => {
     if (status !== "connected") {
       setGatewayModels([]);
       setGatewayModelsError(null);
+      setGatewayConfigSnapshot(null);
       return;
     }
     let cancelled = false;
@@ -1086,6 +1145,9 @@ const AgentStudioPage = () => {
       let configSnapshot: GatewayModelPolicySnapshot | null = null;
       try {
         configSnapshot = await client.call<GatewayModelPolicySnapshot>("config.get", {});
+        if (!cancelled) {
+          setGatewayConfigSnapshot(configSnapshot);
+        }
       } catch (err) {
         if (!isGatewayDisconnectLikeError(err)) {
           console.error("Failed to load gateway config.", err);

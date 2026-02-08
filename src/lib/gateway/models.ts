@@ -19,6 +19,10 @@ export type GatewayModelPolicySnapshot = {
   config?: {
     agents?: {
       defaults?: GatewayModelDefaults;
+      list?: Array<{
+        id?: string;
+        model?: string | { primary?: string; fallbacks?: string[] };
+      }>;
     };
   };
 };

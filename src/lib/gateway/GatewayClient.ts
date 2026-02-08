@@ -253,6 +253,18 @@ type SessionSettingsPatchPayload = {
   thinkingLevel?: string | null;
 };
 
+export type GatewaySessionsPatchResult = {
+  ok: true;
+  key: string;
+  entry?: {
+    thinkingLevel?: string;
+  };
+  resolved?: {
+    modelProvider?: string;
+    model?: string;
+  };
+};
+
 export type SyncGatewaySessionSettingsParams = {
   client: GatewayClient;
   sessionKey: string;
@@ -282,7 +294,7 @@ export const syncGatewaySessionSettings = async ({
   if (includeThinkingLevel) {
     payload.thinkingLevel = thinkingLevel ?? null;
   }
-  await client.call("sessions.patch", payload);
+  return await client.call<GatewaySessionsPatchResult>("sessions.patch", payload);
 };
 
 const formatGatewayError = (error: unknown) => {

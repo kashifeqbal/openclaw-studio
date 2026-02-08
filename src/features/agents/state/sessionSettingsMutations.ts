@@ -1,4 +1,8 @@
-import { syncGatewaySessionSettings, type GatewayClient } from "@/lib/gateway/GatewayClient";
+import {
+  syncGatewaySessionSettings,
+  type GatewayClient,
+  type GatewaySessionsPatchResult,
+} from "@/lib/gateway/GatewayClient";
 
 type SessionSettingField = "model" | "thinkingLevel";
 
@@ -58,18 +62,34 @@ export const applySessionSettingMutation = async ({
       sessionSettingsSynced: false,
     },
   });
-  const agent = agents.find((entry) => entry.agentId === agentId);
-  if (!agent?.sessionCreated) return;
   try {
-    await syncGatewaySessionSettings({
+    const result = await syncGatewaySessionSettings({
       client,
       sessionKey,
       ...(field === "model" ? { model: value ?? null } : { thinkingLevel: value ?? null }),
     });
+    const patch: {
+      model?: string | null;
+      thinkingLevel?: string | null;
+      sessionSettingsSynced: boolean;
+      sessionCreated: boolean;
+    } = { sessionSettingsSynced: true, sessionCreated: true };
+    if (field === "model") {
+      const resolvedModel = resolveModelFromPatchResult(result);
+      if (resolvedModel !== undefined) {
+        patch.model = resolvedModel;
+      }
+    } else {
+      const nextThinkingLevel =
+        typeof result.entry?.thinkingLevel === "string" ? result.entry.thinkingLevel : undefined;
+      if (nextThinkingLevel !== undefined) {
+        patch.thinkingLevel = nextThinkingLevel;
+      }
+    }
     dispatch({
       type: "updateAgent",
       agentId,
-      patch: { sessionSettingsSynced: true },
+      patch,
     });
   } catch (err) {
     const msg = err instanceof Error ? err.message : buildFallbackError(field);
@@ -79,4 +99,12 @@ export const applySessionSettingMutation = async ({
       line: `${buildErrorPrefix(field)}: ${msg}`,
     });
   }
+};
+
+const resolveModelFromPatchResult = (result: GatewaySessionsPatchResult): string | null | undefined => {
+  const provider =
+    typeof result.resolved?.modelProvider === "string" ? result.resolved.modelProvider.trim() : "";
+  const model = typeof result.resolved?.model === "string" ? result.resolved.model.trim() : "";
+  if (!provider || !model) return undefined;
+  return `${provider}/${model}`;
 };
