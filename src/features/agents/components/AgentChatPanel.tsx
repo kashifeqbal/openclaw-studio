@@ -541,7 +541,7 @@ const AgentChatTranscript = memo(function AgentChatTranscript({
       <div
         ref={chatRef}
         data-testid="agent-chat-scroll"
-        className="h-full overflow-auto p-3 sm:p-4"
+        className={`h-full overflow-auto p-3 sm:p-4 ${showJumpToLatest ? "pb-20" : ""}`}
         onScroll={() => updatePinnedFromScroll()}
         onWheel={(event) => {
           event.stopPropagation();
