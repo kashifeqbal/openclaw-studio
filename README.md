@@ -6,6 +6,20 @@
 
 OpenClaw Studio is a Next.js dashboard for managing OpenClaw agents via the OpenClaw Gateway (WebSocket).
 
+## How Studio Connects (Read This If You Use A Phone / Remote Host)
+
+There are **two separate connections** involved:
+
+1. **Your browser -> Studio** (HTTP) at `http://<studio-host>:3000`
+2. **Your browser -> OpenClaw Gateway** (WebSocket) at the configured **Gateway URL**
+
+Important consequences:
+- The Gateway connection is made **from the browser**, not from the machine running `next dev`.
+- `ws://127.0.0.1:18789` / `ws://localhost:18789` means “connect to a gateway on the same device as the browser”.
+  - If you open Studio on your phone, `127.0.0.1` is your phone, not your laptop/server.
+- Studio **persists** the Gateway URL/token under `~/.openclaw/openclaw-studio/settings.json`. Once set in the UI, this will be used on future runs and will override the default `NEXT_PUBLIC_GATEWAY_URL`.
+- If Studio is served over `https://`, the Gateway URL must be `wss://...` (browsers block `ws://` from `https://` pages).
+
 ## Requirements
 
 - Node.js 18+ (LTS recommended)
@@ -66,6 +80,7 @@ Open http://localhost:3000 and set:
 
 Notes:
 - If Studio is served over `https://`, the gateway URL must be `wss://...` (browsers block `ws://` from `https://` pages).
+- If you browse Studio from another device (phone/tablet), do not use `ws://127.0.0.1:18789` unless the gateway is running on that device. Use a reachable host (LAN IP/DNS), `wss://...` via Tailscale Serve, or an SSH tunnel.
 
 ### SSH tunneling (alternative)
 
@@ -95,6 +110,9 @@ Paths and key settings:
 - **Missing config**: Run `openclaw onboard` or set `OPENCLAW_CONFIG_PATH`
 - **Gateway unreachable**: Confirm the gateway is running and `NEXT_PUBLIC_GATEWAY_URL` matches
 - **Auth errors**: Studio currently prompts for a token. Check `gateway.auth.mode` is `token` and `gateway.auth.token` is set in `openclaw.json` (or run `openclaw config get gateway.auth.token`).
+- **UI loads but no agents show up** (common when browsing from a phone):
+  - Check the Gateway URL shown in Studio. If it is `ws://127.0.0.1:18789`, that will only work when browsing Studio on the same machine running the gateway (or via an SSH tunnel).
+  - If you set a Gateway URL once, it is persisted in `~/.openclaw/openclaw-studio/settings.json`. Update it in the UI (or delete/reset the file) if you moved hosts.
 - **Still stuck**: Run `npx -y openclaw-studio@latest doctor --check` (and `--fix --force-settings` to safely rewrite Studio settings).
 
 ## Architecture
