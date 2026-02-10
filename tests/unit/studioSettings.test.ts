@@ -65,7 +65,7 @@ describe("studio settings normalization", () => {
     const merged = mergeStudioSettings(current, {
       focused: {
         "ws://localhost:18789": {
-          filter: "needs-attention",
+          filter: "idle",
         },
       },
     });
@@ -73,7 +73,7 @@ describe("studio settings normalization", () => {
     expect(merged.focused["ws://localhost:18789"]).toEqual({
       mode: "focused",
       selectedAgentId: "main",
-      filter: "needs-attention",
+      filter: "idle",
     });
   });
 

@@ -97,15 +97,9 @@ test("switches_active_agent_from_sidebar", async ({ page }) => {
   ).toBeVisible();
 });
 
-test("applies_attention_filters", async ({ page }) => {
+test("applies_filters", async ({ page }) => {
   await page.route("**/api/studio", createStudioRoute());
   await page.goto("/");
-
-  await page.getByTestId("fleet-filter-needs-attention").click();
-  await expect(page.getByTestId("fleet-filter-needs-attention")).toHaveAttribute(
-    "aria-pressed",
-    "true"
-  );
 
   await page.getByTestId("fleet-filter-running").click();
   await expect(page.getByTestId("fleet-filter-running")).toHaveAttribute(

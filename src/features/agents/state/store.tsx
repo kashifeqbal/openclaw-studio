@@ -10,8 +10,7 @@ import {
 } from "react";
 
 export type AgentStatus = "idle" | "running" | "error";
-export type FocusFilter = "all" | "needs-attention" | "running" | "idle";
-export type AgentAttention = "normal" | "needs-attention";
+export type FocusFilter = "all" | "running" | "idle";
 
 export type AgentStoreSeed = {
   agentId: string;
@@ -265,18 +264,6 @@ export const getSelectedAgent = (state: AgentStoreState): AgentState | null => {
   return state.agents.find((agent) => agent.agentId === state.selectedAgentId) ?? null;
 };
 
-export const getAttentionForAgent = (
-  agent: AgentState,
-  selectedAgentId: string | null
-): AgentAttention => {
-  if (agent.status === "error") return "needs-attention";
-  if (agent.awaitingUserInput) return "needs-attention";
-  if (selectedAgentId !== agent.agentId && agent.hasUnseenActivity) {
-    return "needs-attention";
-  }
-  return "normal";
-};
-
 export const getFilteredAgents = (state: AgentStoreState, filter: FocusFilter): AgentState[] => {
   const byMostRecentAssistant = (agents: AgentState[]) =>
     [...agents].sort((a, b) => {
@@ -285,16 +272,16 @@ export const getFilteredAgents = (state: AgentStoreState, filter: FocusFilter): 
       if (aTs !== bTs) return bTs - aTs;
       return 0;
     });
-  if (filter === "all") return byMostRecentAssistant(state.agents);
-  if (filter === "running") {
-    return byMostRecentAssistant(state.agents.filter((agent) => agent.status === "running"));
+  switch (filter) {
+    case "all":
+      return byMostRecentAssistant(state.agents);
+    case "running":
+      return byMostRecentAssistant(state.agents.filter((agent) => agent.status === "running"));
+    case "idle":
+      return byMostRecentAssistant(state.agents.filter((agent) => agent.status === "idle"));
+    default: {
+      const _exhaustive: never = filter;
+      return byMostRecentAssistant(state.agents);
+    }
   }
-  if (filter === "idle") {
-    return byMostRecentAssistant(state.agents.filter((agent) => agent.status === "idle"));
-  }
-  return byMostRecentAssistant(
-    state.agents.filter(
-      (agent) => getAttentionForAgent(agent, state.selectedAgentId) === "needs-attention"
-    )
-  );
 };

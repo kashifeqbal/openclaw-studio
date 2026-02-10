@@ -206,6 +206,9 @@ const AssistantMessageCard = memo(function AssistantMessageCard({
   const widthClass = resolveAssistantMaxWidthClass(contentText);
   const { intro, artifact, artifactOnly } =
     streaming || !contentText ? { intro: null, artifact: null, artifactOnly: false } : splitArtifactContent(contentText);
+  const hasThinking = Boolean(thinkingText?.trim());
+  const hasContent = Boolean(contentText?.trim());
+  const compactStreamingIndicator = Boolean(streaming && !hasThinking && !hasContent);
 
   return (
     <div className="w-full self-start">
@@ -224,75 +227,93 @@ const AssistantMessageCard = memo(function AssistantMessageCard({
           ) : null}
         </div>
 
-        <div className="mt-2 rounded-md bg-muted/15 px-3 py-2 shadow-sm">
-          {streaming ? (
-            <div
-              className="flex items-center gap-2 rounded-md bg-muted/25 px-2 py-1.5 text-[11px] text-muted-foreground/90"
-              role="status"
-              aria-live="polite"
-              data-testid="agent-typing-indicator"
-            >
-              <span className="font-mono text-[10px] font-semibold uppercase tracking-[0.12em]">
-                {showTypingIndicator ? "Typing" : "Streaming"}
-              </span>
-              <span className="typing-dots" aria-hidden="true">
-                <span />
-                <span />
-                <span />
-              </span>
-            </div>
-          ) : null}
-
-          {thinkingText ? (
-            <ThinkingDetailsRow
-              thinkingText={thinkingText}
-              durationMs={thinkingDurationMs}
-              showTyping={streaming}
-            />
-          ) : null}
-
-          {contentText ? (
-            streaming ? (
-              <div className="whitespace-pre-wrap break-words text-foreground">{contentText}</div>
-            ) : artifact ? (
-              <>
-                {!artifactOnly && intro ? (
-                  <div className="agent-markdown text-foreground">
-                    <ReactMarkdown remarkPlugins={[remarkGfm]}>{intro}</ReactMarkdown>
-                  </div>
-                ) : null}
-                <div className="group rounded-md bg-card/35 px-3 py-2 shadow-sm">
-                  <div className="flex items-center justify-between gap-3 pb-2">
-                    <div className="min-w-0 truncate font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground/90">
-                      Output
-                    </div>
-                    <button
-                      type="button"
-                      className="rounded-md bg-card/60 p-1.5 text-muted-foreground opacity-0 transition hover:bg-muted/50 group-hover:opacity-100"
-                      aria-label="Extract output"
-                      title="Copy output"
-                      onClick={() => {
-                        if (!navigator.clipboard?.writeText) return;
-                        void navigator.clipboard.writeText(artifact).catch((err) => {
-                          console.warn("Failed to copy output to clipboard.", err);
-                        });
-                      }}
-                    >
-                      <Copy className="h-3.5 w-3.5" />
-                    </button>
-                  </div>
-                  <div className="agent-markdown text-foreground">
-                    <ReactMarkdown remarkPlugins={[remarkGfm]}>{artifact}</ReactMarkdown>
-                  </div>
-                </div>
-              </>
-            ) : (
-              <div className="agent-markdown text-foreground">
-                <ReactMarkdown remarkPlugins={[remarkGfm]}>{contentText}</ReactMarkdown>
+        {compactStreamingIndicator ? (
+          <div
+            className="mt-2 inline-flex items-center gap-2 rounded-md bg-muted/15 px-3 py-2 text-[11px] text-muted-foreground/90 shadow-sm"
+            role="status"
+            aria-live="polite"
+            data-testid="agent-typing-indicator"
+          >
+            <span className="font-mono text-[10px] font-semibold uppercase tracking-[0.12em]">
+              {showTypingIndicator ? "Typing" : "Streaming"}
+            </span>
+            <span className="typing-dots" aria-hidden="true">
+              <span />
+              <span />
+              <span />
+            </span>
+          </div>
+        ) : (
+          <div className="mt-2 rounded-md bg-muted/15 px-3 py-2 shadow-sm">
+            {streaming ? (
+              <div
+                className="flex items-center gap-2 text-[11px] text-muted-foreground/90"
+                role="status"
+                aria-live="polite"
+                data-testid="agent-typing-indicator"
+              >
+                <span className="font-mono text-[10px] font-semibold uppercase tracking-[0.12em]">
+                  {showTypingIndicator ? "Typing" : "Streaming"}
+                </span>
+                <span className="typing-dots" aria-hidden="true">
+                  <span />
+                  <span />
+                  <span />
+                </span>
               </div>
-            )
-          ) : null}
-        </div>
+            ) : null}
+
+            {thinkingText ? (
+              <ThinkingDetailsRow
+                thinkingText={thinkingText}
+                durationMs={thinkingDurationMs}
+                showTyping={streaming}
+              />
+            ) : null}
+
+            {contentText ? (
+              streaming ? (
+                <div className="whitespace-pre-wrap break-words text-foreground">{contentText}</div>
+              ) : artifact ? (
+                <>
+                  {!artifactOnly && intro ? (
+                    <div className="agent-markdown text-foreground">
+                      <ReactMarkdown remarkPlugins={[remarkGfm]}>{intro}</ReactMarkdown>
+                    </div>
+                  ) : null}
+                  <div className="group rounded-md bg-card/35 px-3 py-2 shadow-sm">
+                    <div className="flex items-center justify-between gap-3 pb-2">
+                      <div className="min-w-0 truncate font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground/90">
+                        Output
+                      </div>
+                      <button
+                        type="button"
+                        className="rounded-md bg-card/60 p-1.5 text-muted-foreground opacity-0 transition hover:bg-muted/50 group-hover:opacity-100"
+                        aria-label="Extract output"
+                        title="Copy output"
+                        onClick={() => {
+                          if (!navigator.clipboard?.writeText) return;
+                          void navigator.clipboard.writeText(artifact).catch((err) => {
+                            console.warn("Failed to copy output to clipboard.", err);
+                          });
+                        }}
+                      >
+                        <Copy className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                    <div className="agent-markdown text-foreground">
+                      <ReactMarkdown remarkPlugins={[remarkGfm]}>{artifact}</ReactMarkdown>
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <div className="agent-markdown text-foreground">
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>{contentText}</ReactMarkdown>
+                </div>
+              )
+            ) : null}
+          </div>
+        )}
       </div>
     </div>
   );

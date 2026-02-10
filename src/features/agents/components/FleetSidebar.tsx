@@ -1,5 +1,4 @@
 import type { AgentState, FocusFilter } from "@/features/agents/state/store";
-import { getAttentionForAgent } from "@/features/agents/state/store";
 import { AgentAvatar } from "./AgentAvatar";
 import { EmptyStatePanel } from "./EmptyStatePanel";
 
@@ -16,11 +15,6 @@ type FleetSidebarProps = {
 
 const FILTER_OPTIONS: Array<{ value: FocusFilter; label: string; testId: string }> = [
   { value: "all", label: "All", testId: "fleet-filter-all" },
-  {
-    value: "needs-attention",
-    label: "Needs Attention",
-    testId: "fleet-filter-needs-attention",
-  },
   { value: "running", label: "Running", testId: "fleet-filter-running" },
   { value: "idle", label: "Idle", testId: "fleet-filter-idle" },
 ];
@@ -94,7 +88,6 @@ export const FleetSidebar = ({
           <div className="flex flex-col gap-2">
             {agents.map((agent) => {
               const selected = selectedAgentId === agent.agentId;
-              const attention = getAttentionForAgent(agent, selectedAgentId);
               const avatarSeed = agent.avatarSeed ?? agent.agentId;
               return (
                 <button
@@ -125,11 +118,6 @@ export const FleetSidebar = ({
                       >
                         {statusLabel[agent.status]}
                       </span>
-                      {attention === "needs-attention" ? (
-                        <span className="rounded border border-border/80 bg-card/75 px-1.5 py-0.5 font-mono text-[9px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                          Attention
-                        </span>
-                      ) : null}
                     </div>
                   </div>
                 </button>

@@ -3,7 +3,7 @@ export type StudioGatewaySettings = {
   token: string;
 };
 
-export type FocusFilter = "all" | "needs-attention" | "running" | "idle";
+export type FocusFilter = "all" | "running" | "idle";
 export type StudioViewMode = "focused";
 
 export type StudioFocusedPreference = {
@@ -42,9 +42,9 @@ const normalizeFocusFilter = (
   fallback: FocusFilter = "all"
 ): FocusFilter => {
   const filter = coerceString(value);
+  if (filter === "needs-attention") return "all";
   if (
     filter === "all" ||
-    filter === "needs-attention" ||
     filter === "running" ||
     filter === "idle"
   ) {
