@@ -1,6 +1,6 @@
 import { createElement } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 
 const ORIGINAL_ENV = { ...process.env };
 
@@ -66,10 +66,16 @@ const setupAndImportHook = async (gatewayUrl: string | null) => {
   const mod = await import("@/lib/gateway/GatewayClient");
   return {
     useGatewayConnection: mod.useGatewayConnection as (settingsCoordinator: {
-    loadSettings: () => Promise<unknown>;
-    schedulePatch: (patch: unknown) => void;
-    flushPending: () => Promise<void>;
-  }) => { gatewayUrl: string },
+      loadSettings: () => Promise<unknown>;
+      loadSettingsEnvelope?: () => Promise<unknown>;
+      schedulePatch: (patch: unknown) => void;
+      flushPending: () => Promise<void>;
+    }) => {
+      gatewayUrl: string;
+      token: string;
+      localGatewayDefaults: { url: string; token: string } | null;
+      useLocalGatewayDefaults: () => void;
+    },
     captured,
   };
 };
@@ -146,5 +152,67 @@ describe("useGatewayConnection", () => {
     });
     expect(captured.token).toBe("");
     expect(captured.authScopeKey).toBe("ws://localhost:18789");
+  });
+
+  it("applies_local_defaults_from_settings_envelope", async () => {
+    const { useGatewayConnection } = await setupAndImportHook(null);
+    const coordinator = {
+      loadSettings: async () => ({
+        version: 1,
+        gateway: null,
+        focused: {},
+        avatars: {},
+      }),
+      loadSettingsEnvelope: async () => ({
+        settings: {
+          version: 1,
+          gateway: { url: "wss://remote.example", token: "remote-token" },
+          focused: {},
+          avatars: {},
+        },
+        localGatewayDefaults: { url: "ws://localhost:18789", token: "local-token" },
+      }),
+      schedulePatch: () => {},
+      flushPending: async () => {},
+    };
+
+    const Probe = () => {
+      const state = useGatewayConnection(coordinator);
+      return createElement(
+        "div",
+        null,
+        createElement("div", { "data-testid": "gatewayUrl" }, state.gatewayUrl),
+        createElement("div", { "data-testid": "token" }, state.token),
+        createElement(
+          "div",
+          { "data-testid": "localDefaultsUrl" },
+          state.localGatewayDefaults?.url ?? ""
+        ),
+        createElement(
+          "button",
+          {
+            type: "button",
+            onClick: state.useLocalGatewayDefaults,
+            "data-testid": "useLocalDefaults",
+          },
+          "use"
+        )
+      );
+    };
+
+    render(createElement(Probe));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("gatewayUrl")).toHaveTextContent("wss://remote.example");
+    });
+    expect(screen.getByTestId("token")).toHaveTextContent("remote-token");
+    expect(screen.getByTestId("localDefaultsUrl")).toHaveTextContent("ws://localhost:18789");
+
+    fireEvent.click(screen.getByTestId("useLocalDefaults"));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("gatewayUrl")).toHaveTextContent("ws://localhost:18789");
+    });
+    expect(screen.getByTestId("token")).toHaveTextContent("local-token");
   });
 });

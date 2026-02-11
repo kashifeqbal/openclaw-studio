@@ -193,9 +193,11 @@ const AgentStudioPage = () => {
     status,
     gatewayUrl,
     token,
+    localGatewayDefaults,
     error: gatewayError,
     connect,
     disconnect,
+    useLocalGatewayDefaults,
     setGatewayUrl,
     setToken,
   } = useGatewayConnection(settingsCoordinator);
@@ -1812,10 +1814,12 @@ const AgentStudioPage = () => {
           <GatewayConnectScreen
             gatewayUrl={gatewayUrl}
             token={token}
+            localGatewayDefaults={localGatewayDefaults}
             status={status}
             error={gatewayError}
             onGatewayUrlChange={setGatewayUrl}
             onTokenChange={setToken}
+            onUseLocalDefaults={useLocalGatewayDefaults}
             onConnect={() => void connect()}
           />
         </div>

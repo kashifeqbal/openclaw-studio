@@ -25,11 +25,41 @@ describe("studio settings route", () => {
     process.env.OPENCLAW_STATE_DIR = tempDir;
 
     const response = await GET();
-    const body = (await response.json()) as { settings?: Record<string, unknown> };
+    const body = (await response.json()) as {
+      settings?: Record<string, unknown>;
+      localGatewayDefaults?: unknown;
+    };
 
     expect(response.status).toBe(200);
     expect(body.settings?.gateway).toBe(null);
+    expect(body.localGatewayDefaults ?? null).toBeNull();
     expect(body.settings?.version).toBe(1);
+  });
+
+  it("GET returns local gateway defaults from openclaw.json", async () => {
+    tempDir = makeTempDir("studio-settings-get-local-defaults");
+    process.env.OPENCLAW_STATE_DIR = tempDir;
+    fs.writeFileSync(
+      path.join(tempDir, "openclaw.json"),
+      JSON.stringify({ gateway: { port: 18791, auth: { token: "local-token" } } }, null, 2),
+      "utf8"
+    );
+
+    const response = await GET();
+    const body = (await response.json()) as {
+      settings?: { gateway?: { url?: string; token?: string } | null };
+      localGatewayDefaults?: { url?: string; token?: string } | null;
+    };
+
+    expect(response.status).toBe(200);
+    expect(body.localGatewayDefaults).toEqual({
+      url: "ws://localhost:18791",
+      token: "local-token",
+    });
+    expect(body.settings?.gateway).toEqual({
+      url: "ws://localhost:18791",
+      token: "local-token",
+    });
   });
 
   it("PUT returns 400 for non-object JSON payload", async () => {
@@ -74,4 +104,3 @@ describe("studio settings route", () => {
     expect(parsed.gateway).toEqual({ url: "ws://example.test:1234", token: "t" });
   });
 });
-

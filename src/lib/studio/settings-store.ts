@@ -41,18 +41,22 @@ const readOpenclawGatewayDefaults = (): { url: string; token: string } | null =>
   }
 };
 
+export const loadLocalGatewayDefaults = () => {
+  return readOpenclawGatewayDefaults();
+};
+
 export const loadStudioSettings = (): StudioSettings => {
   const settingsPath = resolveStudioSettingsPath();
   if (!fs.existsSync(settingsPath)) {
     const defaults = defaultStudioSettings();
-    const gateway = readOpenclawGatewayDefaults();
+    const gateway = loadLocalGatewayDefaults();
     return gateway ? { ...defaults, gateway } : defaults;
   }
   const raw = fs.readFileSync(settingsPath, "utf8");
   const parsed = JSON.parse(raw) as unknown;
   const settings = normalizeStudioSettings(parsed);
   if (!settings.gateway?.token) {
-    const gateway = readOpenclawGatewayDefaults();
+    const gateway = loadLocalGatewayDefaults();
     if (gateway) {
       return {
         ...settings,

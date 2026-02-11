@@ -1,7 +1,11 @@
 import { NextResponse } from "next/server";
 
 import { type StudioSettingsPatch } from "@/lib/studio/settings";
-import { applyStudioSettingsPatch, loadStudioSettings } from "@/lib/studio/settings-store";
+import {
+  applyStudioSettingsPatch,
+  loadLocalGatewayDefaults,
+  loadStudioSettings,
+} from "@/lib/studio/settings-store";
 
 export const runtime = "nodejs";
 
@@ -11,7 +15,8 @@ const isPatch = (value: unknown): value is StudioSettingsPatch =>
 export async function GET() {
   try {
     const settings = loadStudioSettings();
-    return NextResponse.json({ settings });
+    const localGatewayDefaults = loadLocalGatewayDefaults();
+    return NextResponse.json({ settings, localGatewayDefaults });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Failed to load studio settings.";
     console.error(message);

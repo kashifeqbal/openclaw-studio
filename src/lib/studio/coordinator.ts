@@ -1,11 +1,15 @@
 import { fetchJson } from "@/lib/http";
 import type {
   StudioFocusedPreference,
+  StudioGatewaySettings,
   StudioSettings,
   StudioSettingsPatch,
 } from "@/lib/studio/settings";
 
-export type StudioSettingsResponse = { settings: StudioSettings };
+export type StudioSettingsResponse = {
+  settings: StudioSettings;
+  localGatewayDefaults?: StudioGatewaySettings | null;
+};
 
 type FocusedPatch = Record<string, Partial<StudioFocusedPreference> | null>;
 type AvatarsPatch = Record<string, Record<string, string | null> | null>;
@@ -83,8 +87,12 @@ export class StudioSettingsCoordinator {
   ) {}
 
   async loadSettings(): Promise<StudioSettings | null> {
-    const result = await this.transport.fetchSettings();
+    const result = await this.loadSettingsEnvelope();
     return result.settings ?? null;
+  }
+
+  async loadSettingsEnvelope(): Promise<StudioSettingsResponse> {
+    return await this.transport.fetchSettings();
   }
 
   schedulePatch(patch: StudioSettingsPatch, debounceMs: number = this.defaultDebounceMs): void {
@@ -158,8 +166,8 @@ export const createStudioSettingsCoordinator = (options?: {
 }): StudioSettingsCoordinator => {
   return new StudioSettingsCoordinator(
     {
-    fetchSettings: fetchStudioSettings,
-    updateSettings: updateStudioSettings,
+      fetchSettings: fetchStudioSettings,
+      updateSettings: updateStudioSettings,
     },
     options?.debounceMs
   );

@@ -5,7 +5,12 @@ import {
   GatewayBrowserClient,
   type GatewayHelloOk,
 } from "./openclaw/GatewayBrowserClient";
-import type { StudioSettings, StudioSettingsPatch } from "@/lib/studio/settings";
+import type {
+  StudioGatewaySettings,
+  StudioSettings,
+  StudioSettingsPatch,
+} from "@/lib/studio/settings";
+import type { StudioSettingsResponse } from "@/lib/studio/coordinator";
 import { resolveStudioProxyGatewayUrl } from "@/lib/gateway/proxy-url";
 import { ensureGatewayReloadModeHotForLocalStudio } from "@/lib/gateway/gatewayReloadMode";
 import { GatewayResponseError } from "@/lib/gateway/errors";
@@ -73,6 +78,15 @@ export const isSameSessionKey = (a: string, b: string) => {
 
 const DEFAULT_UPSTREAM_GATEWAY_URL =
   process.env.NEXT_PUBLIC_GATEWAY_URL || "ws://localhost:18789";
+
+const normalizeLocalGatewayDefaults = (value: unknown): StudioGatewaySettings | null => {
+  if (!value || typeof value !== "object") return null;
+  const raw = value as { url?: unknown; token?: unknown };
+  const url = typeof raw.url === "string" ? raw.url.trim() : "";
+  const token = typeof raw.token === "string" ? raw.token.trim() : "";
+  if (!url || !token) return null;
+  return { url, token };
+};
 
 type StatusHandler = (status: GatewayStatus) => void;
 
@@ -318,9 +332,11 @@ export type GatewayConnectionState = {
   status: GatewayStatus;
   gatewayUrl: string;
   token: string;
+  localGatewayDefaults: StudioGatewaySettings | null;
   error: string | null;
   connect: () => Promise<void>;
   disconnect: () => void;
+  useLocalGatewayDefaults: () => void;
   setGatewayUrl: (value: string) => void;
   setToken: (value: string) => void;
   clearError: () => void;
@@ -328,6 +344,7 @@ export type GatewayConnectionState = {
 
 type StudioSettingsCoordinatorLike = {
   loadSettings: () => Promise<StudioSettings | null>;
+  loadSettingsEnvelope?: () => Promise<StudioSettingsResponse>;
   schedulePatch: (patch: StudioSettingsPatch, debounceMs?: number) => void;
   flushPending: () => Promise<void>;
 };
@@ -341,6 +358,9 @@ export const useGatewayConnection = (
 
   const [gatewayUrl, setGatewayUrl] = useState(DEFAULT_UPSTREAM_GATEWAY_URL);
   const [token, setToken] = useState("");
+  const [localGatewayDefaults, setLocalGatewayDefaults] = useState<StudioGatewaySettings | null>(
+    null
+  );
   const [status, setStatus] = useState<GatewayStatus>("disconnected");
   const [error, setError] = useState<string | null>(null);
   const [settingsLoaded, setSettingsLoaded] = useState(false);
@@ -349,9 +369,14 @@ export const useGatewayConnection = (
     let cancelled = false;
     const loadSettings = async () => {
       try {
-        const settings = await settingsCoordinator.loadSettings();
+        const envelope =
+          typeof settingsCoordinator.loadSettingsEnvelope === "function"
+            ? await settingsCoordinator.loadSettingsEnvelope()
+            : { settings: await settingsCoordinator.loadSettings(), localGatewayDefaults: null };
+        const settings = envelope.settings ?? null;
         const gateway = settings?.gateway ?? null;
         if (cancelled) return;
+        setLocalGatewayDefaults(normalizeLocalGatewayDefaults(envelope.localGatewayDefaults));
         const nextGatewayUrl = gateway?.url?.trim() ? gateway.url : DEFAULT_UPSTREAM_GATEWAY_URL;
         const nextToken = typeof gateway?.token === "string" ? gateway.token : "";
         loadedGatewaySettings.current = {
@@ -445,6 +470,15 @@ export const useGatewayConnection = (
     );
   }, [gatewayUrl, settingsCoordinator, settingsLoaded, token]);
 
+  const useLocalGatewayDefaults = useCallback(() => {
+    if (!localGatewayDefaults) {
+      return;
+    }
+    setGatewayUrl(localGatewayDefaults.url);
+    setToken(localGatewayDefaults.token);
+    setError(null);
+  }, [localGatewayDefaults]);
+
   const disconnect = useCallback(() => {
     setError(null);
     client.disconnect();
@@ -459,9 +493,11 @@ export const useGatewayConnection = (
     status,
     gatewayUrl,
     token,
+    localGatewayDefaults,
     error,
     connect,
     disconnect,
+    useLocalGatewayDefaults,
     setGatewayUrl,
     setToken,
     clearError,
