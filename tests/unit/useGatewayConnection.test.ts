@@ -4,7 +4,12 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 
 const ORIGINAL_ENV = { ...process.env };
 
-const setupAndImportHook = async (gatewayUrl: string | null) => {
+type ConnectOutcome = { kind: "success" } | { kind: "close"; code: number; reason: string };
+
+const setupAndImportHook = async (
+  gatewayUrl: string | null,
+  options?: { outcomes?: ConnectOutcome[] }
+) => {
   process.env = { ...ORIGINAL_ENV };
   if (gatewayUrl === null) {
     delete process.env.NEXT_PUBLIC_GATEWAY_URL;
@@ -14,11 +19,22 @@ const setupAndImportHook = async (gatewayUrl: string | null) => {
 
   vi.resetModules();
   vi.spyOn(console, "info").mockImplementation(() => {});
+  vi.doMock("@/lib/gateway/gatewayReloadMode", () => ({
+    ensureGatewayReloadModeHotForLocalStudio: async () => {},
+  }));
 
-  const captured: { url: string | null; token: unknown; authScopeKey: unknown } = {
+  const outcomes = [...(options?.outcomes ?? [{ kind: "success" } as ConnectOutcome])];
+
+  const captured: {
+    url: string | null;
+    token: unknown;
+    authScopeKey: unknown;
+    startCount: number;
+  } = {
     url: null,
     token: null,
     authScopeKey: null,
+    startCount: 0,
   };
 
   vi.doMock("../../src/lib/gateway/openclaw/GatewayBrowserClient", () => {
@@ -44,8 +60,17 @@ const setupAndImportHook = async (gatewayUrl: string | null) => {
       }
 
       start() {
-        this.connected = true;
-        this.opts.onHello?.({ type: "hello-ok", protocol: 1 });
+        captured.startCount += 1;
+        const outcome = outcomes.shift() ?? { kind: "success" };
+        if (outcome.kind === "success") {
+          this.connected = true;
+          this.opts.onHello?.({ type: "hello-ok", protocol: 1 });
+          return;
+        }
+        this.connected = false;
+        queueMicrotask(() => {
+          this.opts.onClose?.({ code: outcome.code, reason: outcome.reason });
+        });
       }
 
       stop() {
@@ -74,6 +99,10 @@ const setupAndImportHook = async (gatewayUrl: string | null) => {
       gatewayUrl: string;
       token: string;
       localGatewayDefaults: { url: string; token: string } | null;
+      status: "disconnected" | "connecting" | "connected";
+      error: string | null;
+      connect: () => Promise<void>;
+      disconnect: () => void;
       useLocalGatewayDefaults: () => void;
     },
     captured,
@@ -84,6 +113,7 @@ describe("useGatewayConnection", () => {
   afterEach(() => {
     cleanup();
     process.env = { ...ORIGINAL_ENV };
+    vi.useRealTimers();
     vi.resetModules();
     vi.restoreAllMocks();
   });
@@ -215,4 +245,125 @@ describe("useGatewayConnection", () => {
     });
     expect(screen.getByTestId("token")).toHaveTextContent("local-token");
   });
+
+  it("retries_after_transient_connect_failure_and_recovers", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const { useGatewayConnection, captured } = await setupAndImportHook(null, {
+      outcomes: [
+        { kind: "close", code: 1012, reason: "gateway restart" },
+        { kind: "success" },
+      ],
+    });
+    const coordinator = {
+      loadSettings: async () => null,
+      schedulePatch: () => {},
+      flushPending: async () => {},
+    };
+
+    const Probe = () => {
+      const state = useGatewayConnection(coordinator);
+      return createElement(
+        "div",
+        null,
+        createElement("div", { "data-testid": "status" }, state.status),
+        createElement("div", { "data-testid": "error" }, state.error ?? "")
+      );
+    };
+
+    render(createElement(Probe));
+
+    await waitFor(() => {
+      expect(captured.startCount).toBe(1);
+    });
+    expect(screen.getByTestId("status")).toHaveTextContent("disconnected");
+    expect(screen.getByTestId("error")).toHaveTextContent(
+      "Gateway closed (1012): gateway restart"
+    );
+
+    await vi.advanceTimersByTimeAsync(2_000);
+
+    await waitFor(() => {
+      expect(captured.startCount).toBe(2);
+    });
+    await waitFor(() => {
+      expect(screen.getByTestId("status")).toHaveTextContent("connected");
+    });
+    expect(screen.getByTestId("error")).toHaveTextContent("");
+  });
+
+  it("does_not_retry_on_non_retryable_auth_connect_error", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const { useGatewayConnection, captured } = await setupAndImportHook(null, {
+      outcomes: [{ kind: "close", code: 4008, reason: "connect failed: FORBIDDEN invalid token" }],
+    });
+    const coordinator = {
+      loadSettings: async () => null,
+      schedulePatch: () => {},
+      flushPending: async () => {},
+    };
+
+    const Probe = () => {
+      const state = useGatewayConnection(coordinator);
+      return createElement("div", { "data-testid": "error" }, state.error ?? "");
+    };
+
+    render(createElement(Probe));
+
+    await waitFor(() => {
+      expect(captured.startCount).toBe(1);
+    });
+    await vi.advanceTimersByTimeAsync(120_000);
+
+    expect(captured.startCount).toBe(1);
+    expect(screen.getByTestId("error")).toHaveTextContent(
+      "Gateway closed (4008): connect failed: FORBIDDEN invalid token"
+    );
+  });
+
+  it("does_not_auto_reconnect_after_manual_disconnect", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const { useGatewayConnection, captured } = await setupAndImportHook(null, {
+      outcomes: [{ kind: "success" }],
+    });
+    const coordinator = {
+      loadSettings: async () => null,
+      schedulePatch: () => {},
+      flushPending: async () => {},
+    };
+
+    const Probe = () => {
+      const state = useGatewayConnection(coordinator);
+      return createElement(
+        "div",
+        null,
+        createElement("div", { "data-testid": "status" }, state.status),
+        createElement(
+          "button",
+          {
+            type: "button",
+            onClick: state.disconnect,
+            "data-testid": "disconnect",
+          },
+          "disconnect"
+        )
+      );
+    };
+
+    render(createElement(Probe));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("status")).toHaveTextContent("connected");
+    });
+    expect(captured.startCount).toBe(1);
+
+    fireEvent.click(screen.getByTestId("disconnect"));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("status")).toHaveTextContent("disconnected");
+    });
+    await vi.advanceTimersByTimeAsync(120_000);
+
+    expect(captured.startCount).toBe(1);
+  });
+
 });
