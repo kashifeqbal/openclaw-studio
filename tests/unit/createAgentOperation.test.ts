@@ -1,6 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
 import type { GatewayClient } from "@/lib/gateway/GatewayClient";
 import {
+  compileGuidedAgentCreation,
+  createDefaultGuidedDraft,
+  resolveGuidedDraftFromPresetBundle,
+} from "@/features/agents/creation/compiler";
+import type { AgentPresetBundle } from "@/features/agents/creation/types";
+import {
   applyGuidedAgentSetup,
   createAgentWithOptionalSetup,
   type AgentGuidedSetup,
@@ -21,6 +27,23 @@ const createSetup = (): AgentGuidedSetup => ({
     allowlist: [{ pattern: "/usr/bin/git" }],
   },
 });
+
+const createSetupFromBundle = (bundle: AgentPresetBundle): AgentGuidedSetup => {
+  const draft = resolveGuidedDraftFromPresetBundle({
+    bundle,
+    seed: createDefaultGuidedDraft(),
+  });
+  const compiled = compileGuidedAgentCreation({
+    name: "Bundle Agent",
+    draft,
+  });
+  expect(compiled.validation.errors).toEqual([]);
+  return {
+    agentOverrides: compiled.agentOverrides,
+    files: compiled.files,
+    execApprovals: compiled.execApprovals,
+  };
+};
 
 describe("createAgentOperation", () => {
   it("applies guided setup for local gateway creation", async () => {
@@ -166,5 +189,38 @@ describe("createAgentOperation", () => {
     );
     expect(lastFilesSet).toBeGreaterThanOrEqual(0);
     expect(calls.lastIndexOf("config.patch")).toBeGreaterThan(lastFilesSet);
+  });
+
+  it("applies setup compiled from PR Engineer bundle without creating a new agent", async () => {
+    const setup = createSetupFromBundle("pr-engineer");
+    const calls: string[] = [];
+    const client = {
+      call: vi.fn(async (method: string) => {
+        calls.push(method);
+        if (method === "config.get") {
+          return {
+            exists: true,
+            hash: "cfg-bundle-1",
+            config: { agents: { list: [{ id: "agent-bundle" }] } },
+          };
+        }
+        if (method === "config.patch") return { ok: true };
+        if (method === "agents.files.set") return { ok: true };
+        if (method === "exec.approvals.get") {
+          return { exists: true, hash: "ap-bundle-1", file: { version: 1, agents: {} } };
+        }
+        if (method === "exec.approvals.set") return { ok: true };
+        throw new Error(`unexpected method ${method}`);
+      }),
+    } as unknown as GatewayClient;
+
+    await applyGuidedAgentSetup({
+      client,
+      agentId: "agent-bundle",
+      setup,
+    });
+
+    expect(calls).not.toContain("agents.create");
+    expect(calls).toContain("config.patch");
   });
 });

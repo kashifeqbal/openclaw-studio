@@ -1,5 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 import type { GatewayClient } from "@/lib/gateway/GatewayClient";
+import {
+  compileGuidedAgentCreation,
+  createDefaultGuidedDraft,
+  resolveGuidedDraftFromPresetBundle,
+} from "@/features/agents/creation/compiler";
+import type { AgentPresetBundle } from "@/features/agents/creation/types";
 import type { AgentGuidedSetup } from "@/features/agents/operations/createAgentOperation";
 import { applyPendingGuidedSetupForAgent, upsertPendingGuidedSetup } from "@/features/agents/creation/recovery";
 import {
@@ -49,6 +55,23 @@ const createSetup = (): AgentGuidedSetup => ({
     allowlist: [{ pattern: "/usr/bin/git" }],
   },
 });
+
+const createSetupFromBundle = (bundle: AgentPresetBundle): AgentGuidedSetup => {
+  const draft = resolveGuidedDraftFromPresetBundle({
+    bundle,
+    seed: createDefaultGuidedDraft(),
+  });
+  const compiled = compileGuidedAgentCreation({
+    name: "Recovery Bundle Agent",
+    draft,
+  });
+  expect(compiled.validation.errors).toEqual([]);
+  return {
+    agentOverrides: compiled.agentOverrides,
+    files: compiled.files,
+    execApprovals: compiled.execApprovals,
+  };
+};
 
 describe("guided setup recovery", () => {
   it("queues recoverable pending setup when local setup fails after create", () => {
@@ -146,5 +169,43 @@ describe("guided setup recovery", () => {
 
     expect(result.applied).toBe(true);
     expect(result.pendingSetupsByAgentId).toEqual({ "agent-2": otherSetup });
+  });
+
+  it("retries pending setup compiled from bundle defaults", async () => {
+    const bundleSetup = createSetupFromBundle("pr-engineer");
+    const calls: string[] = [];
+    const client = {
+      call: vi.fn(async (method: string) => {
+        calls.push(method);
+        if (method === "config.get") {
+          return {
+            exists: true,
+            hash: "cfg-bundle-3",
+            config: { agents: { list: [{ id: "agent-bundle" }] } },
+          };
+        }
+        if (method === "config.patch") return { ok: true };
+        if (method === "agents.files.set") return { ok: true };
+        if (method === "exec.approvals.get") {
+          return {
+            exists: true,
+            hash: "ap-bundle-3",
+            file: { version: 1, agents: {} },
+          };
+        }
+        if (method === "exec.approvals.set") return { ok: true };
+        throw new Error(`unexpected method ${method}`);
+      }),
+    } as unknown as GatewayClient;
+
+    const result = await applyPendingGuidedSetupForAgent({
+      client,
+      agentId: "agent-bundle",
+      pendingSetupsByAgentId: { "agent-bundle": bundleSetup },
+    });
+
+    expect(result.applied).toBe(true);
+    expect(result.pendingSetupsByAgentId).toEqual({});
+    expect(calls).not.toContain("agents.create");
   });
 });
