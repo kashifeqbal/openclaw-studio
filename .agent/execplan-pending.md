@@ -15,7 +15,7 @@ The behavior should be directly observable in tests and in the UI: pending setup
 - [x] (2026-02-12 19:33Z) Reviewed current implementation and converted review findings into concrete hardening scope.
 - [x] (2026-02-12 19:38Z) Milestone 1 complete: added gateway-scoped pending setup persistence, safe storage wrappers, scope-aware page load/persist effects, and passing storage tests.
 - [x] (2026-02-12 19:41Z) Milestone 2 complete: added pure retry coordination helpers, unified setup-apply path across auto/manual/restart flows, removed stale-map replacement writes, and passed retry/recovery tests.
-- [ ] Milestone 3: Run full verification and update reliability docs for the new behavior.
+- [x] (2026-02-12 19:41Z) Milestone 3 complete: updated README/ARCHITECTURE reliability notes and completed typecheck + targeted tests + lint baseline verification.
 
 ## Surprises & Discoveries
 
@@ -33,6 +33,9 @@ The behavior should be directly observable in tests and in the UI: pending setup
 
 - Observation: Restart-complete and reconnect-auto-retry both target the same pending setup queue, so deduplication must live in shared orchestration logic, not in per-caller conditions.
   Evidence: Milestone 2 introduced shared in-flight guards and a single apply callback used by all retry entry points.
+
+- Observation: Safe-storage tests intentionally emit warning logs from wrapper catch blocks when using throwing mock storage.
+  Evidence: `tests/unit/pendingGuidedSetupStore.test.ts` reports `console.warn` output while still passing assertions that load/persist do not throw.
 
 ## Decision Log
 
@@ -62,7 +65,15 @@ The behavior should be directly observable in tests and in the UI: pending setup
 
 ## Outcomes & Retrospective
 
-Pending implementation.
+Implemented gateway-scoped pending guided setup storage, deduplicated retry orchestration, and stale-state-safe pending removal across all apply paths. The highest-risk merge issues identified in review (cross-gateway collision, duplicate apply race, and stale map clobber) are now addressed with direct test coverage.
+
+Verification results:
+
+- `npm run typecheck` passed.
+- `npx vitest run tests/unit/pendingGuidedSetupStore.test.ts tests/unit/guidedSetupRecovery.test.ts tests/unit/pendingGuidedSetupRetry.test.ts tests/unit/createAgentOperation.test.ts tests/unit/agentCreateModal.test.ts` passed (20 tests).
+- `npm run lint` failed only on pre-existing baseline issues in CommonJS server/scripts files and existing `accessGate` test typing; no new lint findings were introduced in touched hardening files.
+
+Remaining gap: this plan intentionally did not remediate repo-wide lint baseline debt because it is unrelated to guided setup reliability and would increase merge scope risk.
 
 ## Context and Orientation
 

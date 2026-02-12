@@ -123,7 +123,8 @@ Paths and key settings:
   - per-agent exec approval policy in `exec-approvals.json`
   - core agent files (`AGENTS.md`, `SOUL.md`, `IDENTITY.md`, `USER.md`, `TOOLS.md`, `HEARTBEAT.md`, `MEMORY.md`)
   - additive tool policy (`tools.alsoAllow`) so guided selections do not remove base profile tools
-- If guided setup fails after `agents.create`, Studio keeps the created agent, stores a pending setup in tab-scoped session storage, and shows `Retry setup` / `Discard pending setup` in chat.
+- If guided setup fails after `agents.create`, Studio keeps the created agent, stores a pending setup in tab-scoped session storage keyed by gateway URL, and shows `Retry setup` / `Discard pending setup` in chat.
+- Auto-retry is deduplicated across reconnect and restart flows, so one pending setup is applied at most once at a time per agent.
 - Studio does not modify global defaults during guided creation.
 
 ## Exec approvals in chat
