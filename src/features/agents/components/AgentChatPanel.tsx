@@ -12,8 +12,9 @@ import {
 import type { AgentState as AgentRecord } from "@/features/agents/state/store";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { Cog, Copy, Shuffle } from "lucide-react";
+import { ChevronRight, Clock, Cog, Copy, Shuffle } from "lucide-react";
 import type { GatewayModelChoice } from "@/lib/gateway/models";
+import { isTraceMarkdown } from "@/lib/text/message-extract";
 import { isNearBottom } from "@/lib/dom";
 import { AgentAvatar } from "./AgentAvatar";
 import {
@@ -30,6 +31,13 @@ const formatChatTimestamp = (timestampMs: number): string => {
     minute: "2-digit",
     hour12: true,
   }).format(new Date(timestampMs));
+};
+
+const formatDurationLabel = (durationMs: number): string => {
+  const seconds = durationMs / 1000;
+  if (!Number.isFinite(seconds) || seconds <= 0) return "0.0s";
+  if (seconds < 10) return `${seconds.toFixed(1)}s`;
+  return `${Math.round(seconds)}s`;
 };
 
 const SPINE_LEFT = "left-[15px]";
@@ -110,6 +118,46 @@ type AgentChatPanelProps = {
   onAvatarShuffle: () => void;
 };
 
+const ThinkingDetailsRow = memo(function ThinkingDetailsRow({
+  thinkingText,
+  durationMs,
+  showTyping,
+}: {
+  thinkingText: string;
+  durationMs?: number;
+  showTyping?: boolean;
+}) {
+  if (!thinkingText.trim()) return null;
+  return (
+    <details className="group rounded-[8px] border border-border/70 bg-surface-2 px-2 py-1.5 text-[10px] text-muted-foreground/80">
+      <summary className="flex cursor-pointer list-none items-center gap-2 opacity-65 [&::-webkit-details-marker]:hidden">
+        <ChevronRight className="h-3 w-3 shrink-0 transition group-open:rotate-90" />
+        <span className="flex min-w-0 items-center gap-2">
+          <span className="font-mono text-[9px] font-semibold uppercase tracking-[0.12em]">
+            Thinking (internal)
+          </span>
+          {typeof durationMs === "number" ? (
+            <span className="inline-flex items-center gap-1 font-mono text-[9px] font-semibold uppercase tracking-[0.12em] text-muted-foreground/80">
+              <Clock className="h-3 w-3" />
+              {formatDurationLabel(durationMs)}
+            </span>
+          ) : null}
+          {showTyping ? (
+            <span className="typing-dots" aria-hidden="true">
+              <span />
+              <span />
+              <span />
+            </span>
+          ) : null}
+        </span>
+      </summary>
+      <div className="agent-markdown mt-2 min-w-0 pl-5 text-foreground/85">
+        <ReactMarkdown remarkPlugins={[remarkGfm]}>{thinkingText}</ReactMarkdown>
+      </div>
+    </details>
+  );
+});
+
 const UserMessageCard = memo(function UserMessageCard({
   text,
   timestampMs,
@@ -141,6 +189,9 @@ const AssistantMessageCard = memo(function AssistantMessageCard({
   avatarUrl,
   name,
   timestampMs,
+  thinkingText,
+  thinkingDurationMs,
+  showTypingIndicator,
   contentText,
   streaming,
 }: {
@@ -148,6 +199,9 @@ const AssistantMessageCard = memo(function AssistantMessageCard({
   avatarUrl: string | null;
   name: string;
   timestampMs?: number;
+  thinkingText?: string | null;
+  thinkingDurationMs?: number;
+  showTypingIndicator?: boolean;
   contentText?: string | null;
   streaming?: boolean;
 }) {
@@ -155,7 +209,9 @@ const AssistantMessageCard = memo(function AssistantMessageCard({
   const widthClass = resolveAssistantMaxWidthClass(contentText);
   const { intro, artifact, artifactOnly } =
     streaming || !contentText ? { intro: null, artifact: null, artifactOnly: false } : splitArtifactContent(contentText);
-  if (!contentText?.trim()) return null;
+  const hasThinking = Boolean(thinkingText?.trim());
+  const hasContent = Boolean(contentText?.trim());
+  const compactStreamingIndicator = Boolean(streaming && !hasThinking && !hasContent);
 
   return (
     <div className="w-full self-start">
@@ -174,47 +230,93 @@ const AssistantMessageCard = memo(function AssistantMessageCard({
           ) : null}
         </div>
 
-        <div className="mt-2 space-y-3">
-          {streaming ? (
-            <div className="whitespace-pre-wrap break-words text-foreground">{contentText}</div>
-          ) : artifact ? (
-            <>
-              {!artifactOnly && intro ? (
-                <div className="agent-markdown text-foreground">
-                  <ReactMarkdown remarkPlugins={[remarkGfm]}>{intro}</ReactMarkdown>
-                </div>
-              ) : null}
-              <div className="group rounded-[8px] border border-border/70 bg-surface-3 px-3 py-2">
-                <div className="flex items-center justify-between gap-3 pb-2">
-                  <div className="min-w-0 truncate font-mono text-[9px] font-semibold uppercase tracking-[0.12em] text-muted-foreground/80">
-                    Output
-                  </div>
-                  <button
-                    type="button"
-                    className="rounded-[8px] bg-surface-1 p-1.5 text-muted-foreground opacity-0 transition hover:bg-surface-2 group-hover:opacity-100"
-                    aria-label="Extract output"
-                    title="Copy output"
-                    onClick={() => {
-                      if (!navigator.clipboard?.writeText) return;
-                      void navigator.clipboard.writeText(artifact).catch((err) => {
-                        console.warn("Failed to copy output to clipboard.", err);
-                      });
-                    }}
-                  >
-                    <Copy className="h-3.5 w-3.5" />
-                  </button>
-                </div>
-                <div className="agent-markdown text-foreground">
-                  <ReactMarkdown remarkPlugins={[remarkGfm]}>{artifact}</ReactMarkdown>
-                </div>
+        {compactStreamingIndicator ? (
+          <div
+            className="mt-2 inline-flex items-center gap-2 rounded-[8px] border border-border/70 bg-surface-3 px-3 py-2 text-[10px] text-muted-foreground/80"
+            role="status"
+            aria-live="polite"
+            data-testid="agent-typing-indicator"
+          >
+            <span className="font-mono text-[9px] font-semibold uppercase tracking-[0.12em]">
+              {showTypingIndicator ? "Typing" : "Streaming"}
+            </span>
+            <span className="typing-dots" aria-hidden="true">
+              <span />
+              <span />
+              <span />
+            </span>
+          </div>
+        ) : (
+          <div className="mt-2 space-y-3">
+            {streaming ? (
+              <div
+                className="flex items-center gap-2 text-[10px] text-muted-foreground/80"
+                role="status"
+                aria-live="polite"
+                data-testid="agent-typing-indicator"
+              >
+                <span className="font-mono text-[9px] font-semibold uppercase tracking-[0.12em]">
+                  {showTypingIndicator ? "Typing" : "Streaming"}
+                </span>
+                <span className="typing-dots" aria-hidden="true">
+                  <span />
+                  <span />
+                  <span />
+                </span>
               </div>
-            </>
-          ) : (
-            <div className="agent-markdown text-foreground">
-              <ReactMarkdown remarkPlugins={[remarkGfm]}>{contentText}</ReactMarkdown>
-            </div>
-          )}
-        </div>
+            ) : null}
+
+            {thinkingText ? (
+              <ThinkingDetailsRow
+                thinkingText={thinkingText}
+                durationMs={thinkingDurationMs}
+                showTyping={streaming}
+              />
+            ) : null}
+
+            {contentText ? (
+              streaming ? (
+                <div className="whitespace-pre-wrap break-words text-foreground">{contentText}</div>
+              ) : artifact ? (
+                <>
+                  {!artifactOnly && intro ? (
+                    <div className="agent-markdown text-foreground">
+                      <ReactMarkdown remarkPlugins={[remarkGfm]}>{intro}</ReactMarkdown>
+                    </div>
+                  ) : null}
+                  <div className="group rounded-[8px] border border-border/70 bg-surface-3 px-3 py-2">
+                    <div className="flex items-center justify-between gap-3 pb-2">
+                      <div className="min-w-0 truncate font-mono text-[9px] font-semibold uppercase tracking-[0.12em] text-muted-foreground/80">
+                        Output
+                      </div>
+                      <button
+                        type="button"
+                        className="rounded-[8px] bg-surface-1 p-1.5 text-muted-foreground opacity-0 transition hover:bg-surface-2 group-hover:opacity-100"
+                        aria-label="Extract output"
+                        title="Copy output"
+                        onClick={() => {
+                          if (!navigator.clipboard?.writeText) return;
+                          void navigator.clipboard.writeText(artifact).catch((err) => {
+                            console.warn("Failed to copy output to clipboard.", err);
+                          });
+                        }}
+                      >
+                        <Copy className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                    <div className="agent-markdown text-foreground">
+                      <ReactMarkdown remarkPlugins={[remarkGfm]}>{artifact}</ReactMarkdown>
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <div className="agent-markdown text-foreground">
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>{contentText}</ReactMarkdown>
+                </div>
+              )
+            ) : null}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -240,7 +342,13 @@ const AgentChatFinalItems = memo(function AgentChatFinalItems({
   let pendingThinking: AgentChatItem | null = null;
   const blocks: Array<
     | { kind: "user"; text: string; timestampMs?: number }
-    | { kind: "assistant"; text: string | null; timestampMs?: number }
+    | {
+        kind: "assistant";
+        text: string | null;
+        timestampMs?: number;
+        thinkingText?: string;
+        thinkingDurationMs?: number;
+      }
     | { kind: "tool"; text: string }
   > = [];
 
@@ -259,11 +367,25 @@ const AgentChatFinalItems = memo(function AgentChatFinalItems({
         kind: "assistant",
         text: item.text,
         timestampMs: item.timestampMs ?? pendingThinking?.timestampMs,
+        thinkingText: pendingThinking?.kind === "thinking" ? pendingThinking.text : undefined,
+        thinkingDurationMs:
+          item.thinkingDurationMs ??
+          (pendingThinking?.kind === "thinking" ? pendingThinking.thinkingDurationMs : undefined),
       });
       pendingThinking = null;
       continue;
     }
     blocks.push({ kind: "tool", text: item.text });
+  }
+
+  if (pendingThinking?.kind === "thinking") {
+    blocks.push({
+      kind: "assistant",
+      text: null,
+      timestampMs: pendingThinking.timestampMs,
+      thinkingText: pendingThinking.text,
+      thinkingDurationMs: pendingThinking.thinkingDurationMs,
+    });
   }
 
   return (
@@ -304,6 +426,8 @@ const AgentChatFinalItems = memo(function AgentChatFinalItems({
             avatarUrl={avatarUrl}
             name={name}
             timestampMs={block.timestampMs ?? (streaming ? runStartedAt ?? undefined : undefined)}
+            thinkingText={block.thinkingText ?? null}
+            thinkingDurationMs={block.thinkingDurationMs}
             contentText={block.text}
             streaming={streaming}
           />
@@ -324,9 +448,12 @@ const AgentChatTranscript = memo(function AgentChatTranscript({
   historyFetchLimit,
   onLoadMoreHistory,
   chatItems,
+  liveThinkingText,
   liveAssistantText,
+  showTypingIndicator,
   outputLineCount,
   liveAssistantCharCount,
+  liveThinkingCharCount,
   runStartedAt,
   scrollToBottomNextOutputRef,
 }: {
@@ -340,9 +467,12 @@ const AgentChatTranscript = memo(function AgentChatTranscript({
   historyFetchLimit: number | null;
   onLoadMoreHistory: () => void;
   chatItems: AgentChatItem[];
+  liveThinkingText: string;
   liveAssistantText: string;
+  showTypingIndicator: boolean;
   outputLineCount: number;
   liveAssistantCharCount: number;
+  liveThinkingCharCount: number;
   runStartedAt: number | null;
   scrollToBottomNextOutputRef: MutableRefObject<boolean>;
 }) {
@@ -398,7 +528,8 @@ const AgentChatTranscript = memo(function AgentChatTranscript({
     updatePinnedFromScroll();
   }, [updatePinnedFromScroll]);
 
-  const showJumpToLatest = !isPinned && (outputLineCount > 0 || liveAssistantCharCount > 0);
+  const showJumpToLatest =
+    !isPinned && (outputLineCount > 0 || liveAssistantCharCount > 0 || liveThinkingCharCount > 0);
 
   useEffect(() => {
     const shouldForceScroll = scrollToBottomNextOutputRef.current;
@@ -414,6 +545,7 @@ const AgentChatTranscript = memo(function AgentChatTranscript({
     }
   }, [
     liveAssistantCharCount,
+    liveThinkingCharCount,
     outputLineCount,
     scheduleScrollToBottom,
     scrollToBottomNextOutputRef,
@@ -428,7 +560,7 @@ const AgentChatTranscript = memo(function AgentChatTranscript({
     };
   }, []);
 
-  const showLiveAssistantCard = Boolean(liveAssistantText);
+  const showLiveAssistantCard = Boolean(liveThinkingText || liveAssistantText || showTypingIndicator);
 
   useEffect(() => {
     if (status !== "running" || typeof runStartedAt !== "number" || !showLiveAssistantCard) {
@@ -490,12 +622,19 @@ const AgentChatTranscript = memo(function AgentChatTranscript({
                 running={status === "running"}
                 runStartedAt={runStartedAt}
               />
-              {liveAssistantText ? (
+              {liveThinkingText || liveAssistantText || showTypingIndicator ? (
                 <AssistantMessageCard
                   avatarSeed={avatarSeed}
                   avatarUrl={avatarUrl}
                   name={name}
                   timestampMs={runStartedAt ?? undefined}
+                  thinkingText={liveThinkingText || null}
+                  thinkingDurationMs={
+                    typeof runStartedAt === "number" && typeof nowMs === "number"
+                      ? Math.max(0, nowMs - runStartedAt)
+                      : undefined
+                  }
+                  showTypingIndicator={showTypingIndicator}
                   contentText={liveAssistantText || null}
                   streaming={status === "running"}
                 />
@@ -678,6 +817,40 @@ export const AgentChatPanel = ({
     [agent.outputLines, agent.showThinkingTraces, agent.toolCallingEnabled]
   );
   const liveAssistantText = agent.streamText ? normalizeAssistantDisplayText(agent.streamText) : "";
+  const liveThinkingText =
+    agent.showThinkingTraces && agent.thinkingTrace ? agent.thinkingTrace.trim() : "";
+  const hasLiveAssistantText = Boolean(liveAssistantText.trim());
+  const hasVisibleLiveThinking = Boolean(liveThinkingText.trim());
+  const latestUserOutputIndex = useMemo(() => {
+    let latestUserIndex = -1;
+    for (let index = agent.outputLines.length - 1; index >= 0; index -= 1) {
+      const line = agent.outputLines[index]?.trim();
+      if (!line) continue;
+      if (line.startsWith(">")) {
+        latestUserIndex = index;
+        break;
+      }
+    }
+    return latestUserIndex;
+  }, [agent.outputLines]);
+  const hasSavedThinkingSinceLatestUser = useMemo(() => {
+    if (!agent.showThinkingTraces || latestUserOutputIndex < 0) return false;
+    for (
+      let index = latestUserOutputIndex + 1;
+      index < agent.outputLines.length;
+      index += 1
+    ) {
+      if (isTraceMarkdown(agent.outputLines[index] ?? "")) {
+        return true;
+      }
+    }
+    return false;
+  }, [agent.outputLines, agent.showThinkingTraces, latestUserOutputIndex]);
+  const showTypingIndicator =
+    agent.status === "running" &&
+    !hasLiveAssistantText &&
+    !hasVisibleLiveThinking &&
+    !hasSavedThinkingSinceLatestUser;
 
   const modelOptions = useMemo(
     () =>
@@ -845,9 +1018,12 @@ export const AgentChatPanel = ({
 	          historyFetchLimit={agent.historyFetchLimit}
 	          onLoadMoreHistory={onLoadMoreHistory}
 	          chatItems={chatItems}
+	          liveThinkingText={liveThinkingText}
 	          liveAssistantText={liveAssistantText}
+	          showTypingIndicator={showTypingIndicator}
 	          outputLineCount={agent.outputLines.length}
           liveAssistantCharCount={agent.streamText?.length ?? 0}
+          liveThinkingCharCount={agent.thinkingTrace?.length ?? 0}
           runStartedAt={agent.runStartedAt}
           scrollToBottomNextOutputRef={scrollToBottomNextOutputRef}
         />

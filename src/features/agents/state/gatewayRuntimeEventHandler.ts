@@ -215,8 +215,17 @@ export function createGatewayRuntimeEventHandler(
     const agentId = findAgentBySessionKey(agentsSnapshot, payload.sessionKey);
     if (!agentId) return;
     const agent = agentsSnapshot.find((entry) => entry.agentId === agentId);
-
+    const activeRunId = agent?.runId?.trim() ?? "";
     const role = resolveRole(payload.message);
+
+    if (payload.runId && activeRunId && activeRunId !== payload.runId) {
+      clearRunTracking(payload.runId);
+      return;
+    }
+    if (!activeRunId && agent?.status !== "running" && payload.state === "delta" && role !== "user" && role !== "system") {
+      clearRunTracking(payload.runId ?? null);
+      return;
+    }
     const summaryPatch = getChatSummaryPatch(payload, now());
     if (summaryPatch) {
       deps.dispatch({
@@ -424,11 +433,26 @@ export function createGatewayRuntimeEventHandler(
     if (!match) return;
     const agent = agentsSnapshot.find((entry) => entry.agentId === match);
     if (!agent) return;
-
-    markActivityThrottled(match);
     const stream = typeof payload.stream === "string" ? payload.stream : "";
     const data =
       payload.data && typeof payload.data === "object" ? (payload.data as Record<string, unknown>) : null;
+    const phase = typeof data?.phase === "string" ? data.phase : "";
+    const activeRunId = agent.runId?.trim() ?? "";
+
+    if (activeRunId && activeRunId !== payload.runId) {
+      if (!(stream === "lifecycle" && phase === "start")) {
+        clearRunTracking(payload.runId);
+        return;
+      }
+    }
+    if (!activeRunId && agent.status !== "running") {
+      if (!(stream === "lifecycle" && phase === "start")) {
+        clearRunTracking(payload.runId);
+        return;
+      }
+    }
+
+    markActivityThrottled(match);
     const hasChatEvents = chatRunSeen.has(payload.runId);
 
     if (isReasoningRuntimeAgentStream(stream)) {
@@ -561,7 +585,6 @@ export function createGatewayRuntimeEventHandler(
     if (stream !== "lifecycle") return;
     const summaryPatch = getAgentSummaryPatch(payload, now());
     if (!summaryPatch) return;
-    const phase = typeof data?.phase === "string" ? data.phase : "";
     if (phase !== "start" && phase !== "end" && phase !== "error") return;
     const transition = resolveLifecyclePatch({
       phase,

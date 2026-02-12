@@ -51,7 +51,7 @@ const createAgent = (overrides?: Partial<AgentState>): AgentState => {
 
 describe("gateway runtime event handler (chat)", () => {
   it("applies delta assistant chat stream via queueLivePatch", () => {
-    const agents = [createAgent()];
+    const agents = [createAgent({ status: "running", runId: "run-1", runStartedAt: 900 })];
     const dispatch = vi.fn();
     const queueLivePatch = vi.fn();
 
@@ -97,7 +97,7 @@ describe("gateway runtime event handler (chat)", () => {
   });
 
   it("ignores user/system roles for streaming output", () => {
-    const agents = [createAgent()];
+    const agents = [createAgent({ status: "running", runId: "run-1", runStartedAt: 900 })];
     const queueLivePatch = vi.fn();
     const dispatch = vi.fn();
 
@@ -127,6 +127,47 @@ describe("gateway runtime event handler (chat)", () => {
         sessionKey: agents[0]!.sessionKey,
         state: "delta",
         message: { role: "user", content: "Hello" },
+      },
+    });
+
+    expect(queueLivePatch).not.toHaveBeenCalled();
+  });
+
+  it("ignores stale delta chat events for non-active runIds", () => {
+    const agents = [
+      createAgent({
+        status: "running",
+        runId: "run-2",
+        runStartedAt: 900,
+      }),
+    ];
+    const queueLivePatch = vi.fn();
+    const handler = createGatewayRuntimeEventHandler({
+      getStatus: () => "connected",
+      getAgents: () => agents,
+      dispatch: vi.fn(),
+      queueLivePatch,
+      clearPendingLivePatch: vi.fn(),
+      now: () => 1000,
+      loadSummarySnapshot: vi.fn(async () => {}),
+      loadAgentHistory: vi.fn(async () => {}),
+      refreshHeartbeatLatestUpdate: vi.fn(),
+      bumpHeartbeatTick: vi.fn(),
+      setTimeout: (fn, ms) => setTimeout(fn, ms) as unknown as number,
+      clearTimeout: (id) => clearTimeout(id as unknown as NodeJS.Timeout),
+      isDisconnectLikeError: () => false,
+      logWarn: vi.fn(),
+      updateSpecialLatestUpdate: vi.fn(),
+    });
+
+    handler.handleEvent({
+      type: "event",
+      event: "chat",
+      payload: {
+        runId: "run-1",
+        sessionKey: agents[0]!.sessionKey,
+        state: "delta",
+        message: { role: "assistant", content: "stale text" },
       },
     });
 

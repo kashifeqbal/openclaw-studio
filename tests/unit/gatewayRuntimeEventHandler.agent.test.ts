@@ -51,7 +51,7 @@ const createAgent = (overrides?: Partial<AgentState>): AgentState => {
 
 describe("gateway runtime event handler (agent)", () => {
   it("updates reasoning stream thinking trace via queueLivePatch", () => {
-    const agents = [createAgent()];
+    const agents = [createAgent({ status: "running", runId: "run-1", runStartedAt: 900 })];
     const queueLivePatch = vi.fn();
     const handler = createGatewayRuntimeEventHandler({
       getStatus: () => "connected",
@@ -105,7 +105,14 @@ describe("gateway runtime event handler (agent)", () => {
   });
 
   it("suppresses assistant stream publish when chat stream already owns it", () => {
-    const agents = [createAgent({ streamText: "already streaming" })];
+    const agents = [
+      createAgent({
+        status: "running",
+        runId: "run-2",
+        runStartedAt: 900,
+        streamText: "already streaming",
+      }),
+    ];
     const queueLivePatch = vi.fn();
     const handler = createGatewayRuntimeEventHandler({
       getStatus: () => "connected",
@@ -158,7 +165,7 @@ describe("gateway runtime event handler (agent)", () => {
   });
 
   it("formats and dedupes tool call lines per run", () => {
-    const agents = [createAgent()];
+    const agents = [createAgent({ status: "running", runId: "run-3", runStartedAt: 900 })];
     const actions: Array<{ type: string; line?: string }> = [];
     const handler = createGatewayRuntimeEventHandler({
       getStatus: () => "connected",
@@ -205,6 +212,41 @@ describe("gateway runtime event handler (agent)", () => {
       .filter((line) => line.startsWith("[[tool]]"));
     expect(toolLines.length).toBe(1);
     expect(toolLines[0]).toContain("myTool");
+  });
+
+  it("ignores stale assistant stream events for non-active runIds", () => {
+    const agents = [createAgent({ status: "running", runId: "run-2", runStartedAt: 900 })];
+    const queueLivePatch = vi.fn();
+    const handler = createGatewayRuntimeEventHandler({
+      getStatus: () => "connected",
+      getAgents: () => agents,
+      dispatch: vi.fn(),
+      queueLivePatch,
+      clearPendingLivePatch: vi.fn(),
+      now: () => 1000,
+      loadSummarySnapshot: vi.fn(async () => {}),
+      loadAgentHistory: vi.fn(async () => {}),
+      refreshHeartbeatLatestUpdate: vi.fn(),
+      bumpHeartbeatTick: vi.fn(),
+      setTimeout: (fn, ms) => setTimeout(fn, ms) as unknown as number,
+      clearTimeout: (id) => clearTimeout(id as unknown as NodeJS.Timeout),
+      isDisconnectLikeError: () => false,
+      logWarn: vi.fn(),
+      updateSpecialLatestUpdate: vi.fn(),
+    });
+
+    handler.handleEvent({
+      type: "event",
+      event: "agent",
+      payload: {
+        runId: "run-1",
+        sessionKey: agents[0]!.sessionKey,
+        stream: "assistant",
+        data: { text: "stale text" },
+      },
+    } as EventFrame);
+
+    expect(queueLivePatch).not.toHaveBeenCalled();
   });
 
   it("applies lifecycle transitions and appends final stream text when no chat events", () => {
