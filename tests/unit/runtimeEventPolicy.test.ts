@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  decideRuntimeAgentEvent,
   decideRuntimeChatEvent,
   decideSummaryRefreshEvent,
   type RuntimePolicyIntent,
@@ -148,6 +149,56 @@ describe("runtime event policy", () => {
         runId: null,
       },
     });
+  });
+
+  it("returns_ignore_for_duplicate_terminal_chat_run", () => {
+    const intents = decideRuntimeChatEvent({
+      agentId: "agent-1",
+      state: "final",
+      runId: "run-1",
+      role: "assistant",
+      activeRunId: "run-1",
+      agentStatus: "running",
+      now: 2000,
+      agentRunStartedAt: 900,
+      nextThinking: null,
+      nextText: "Done",
+      hasThinkingStarted: true,
+      isClosedRun: false,
+      isTerminalRunSeen: true,
+      shouldRequestHistoryRefresh: false,
+      shouldUpdateLastResult: false,
+      shouldSetRunIdle: true,
+      shouldSetRunError: false,
+      lastResultText: null,
+      assistantCompletionAt: 1900,
+      shouldQueueLatestUpdate: false,
+      latestUpdateMessage: null,
+    });
+
+    expect(intents).toEqual([{ kind: "ignore", reason: "terminal-run-seen" }]);
+  });
+
+  it("returns_agent_preflight_intents_for_closed_or_stale_runs", () => {
+    const closed = decideRuntimeAgentEvent({
+      runId: "run-1",
+      stream: "assistant",
+      phase: "",
+      activeRunId: "run-1",
+      agentStatus: "running",
+      isClosedRun: true,
+    });
+    const stale = decideRuntimeAgentEvent({
+      runId: "run-1",
+      stream: "assistant",
+      phase: "",
+      activeRunId: "run-2",
+      agentStatus: "running",
+      isClosedRun: false,
+    });
+
+    expect(closed).toEqual([{ kind: "ignore", reason: "closed-run-event" }]);
+    expect(stale).toEqual([{ kind: "clearRunTracking", runId: "run-1" }]);
   });
 
   it("returns_summary_refresh_intent_for_presence_and_heartbeat", () => {

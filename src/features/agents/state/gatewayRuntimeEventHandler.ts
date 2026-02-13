@@ -482,7 +482,7 @@ export function createGatewayRuntimeEventHandler(
       !nextThinking &&
       role === "assistant" &&
       Boolean(agent) &&
-      !agent.outputLines.some((line) => isTraceMarkdown(line.trim()));
+      !(agent?.outputLines.some((line) => isTraceMarkdown(line.trim())) ?? false);
     const shouldUpdateLastResult =
       payload.state === "final" && !isToolRole && typeof nextText === "string";
     const shouldQueueLatestUpdate =
