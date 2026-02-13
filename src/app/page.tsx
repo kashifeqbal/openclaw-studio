@@ -77,7 +77,6 @@ import {
 import {
   beginPendingGuidedSetupRetry,
   endPendingGuidedSetupRetry,
-  selectNextPendingGuidedSetupRetryAgentId,
 } from "@/features/agents/creation/pendingSetupRetry";
 import {
   loadPendingGuidedSetupsFromStorage,
@@ -95,7 +94,6 @@ import {
 } from "@/features/agents/operations/guidedCreateWorkflow";
 import {
   runPendingSetupRetryLifecycle,
-  shouldAttemptPendingSetupAutoRetry,
 } from "@/features/agents/operations/pendingSetupLifecycleWorkflow";
 import {
   isGatewayDisconnectLikeError,
@@ -108,7 +106,6 @@ import { sendChatMessageViaStudio } from "@/features/agents/operations/chatSendO
 import { hydrateAgentFleetFromGateway } from "@/features/agents/operations/agentFleetHydration";
 import {
   buildConfigMutationFailureMessage,
-  resolveConfigMutationPostRunEffects,
   resolveConfigMutationStatusLine,
   runConfigMutationWorkflow,
 } from "@/features/agents/operations/configMutationWorkflow";
@@ -159,6 +156,12 @@ import {
   resolveHistoryRequestIntent,
   resolveHistoryResponseDisposition,
 } from "@/features/agents/operations/historyLifecycleWorkflow";
+import {
+  buildQueuedMutationBlock,
+  resolveMutationPostRunIntent,
+  resolveMutationStartGuard,
+  resolvePendingSetupAutoRetryIntent,
+} from "@/features/agents/operations/agentMutationLifecycleController";
 
 type ChatHistoryMessage = Record<string, unknown>;
 
@@ -951,28 +954,21 @@ const AgentStudioPage = () => {
   }, [pendingCreateSetupsByAgentId, pendingCreateSetupsLoadedScope, pendingGuidedSetupGatewayScope]);
 
   useEffect(() => {
-    if (
-      !shouldAttemptPendingSetupAutoRetry({
-        status,
-        agentsLoadedOnce,
-        loadedScopeMatches: pendingCreateSetupsLoadedScope === pendingGuidedSetupGatewayScope,
-        hasActiveCreateBlock: Boolean(createAgentBlock && createAgentBlock.phase !== "queued"),
-        retryBusyAgentId: retryPendingSetupBusyAgentId,
-      })
-    ) {
-      return;
-    }
-
-    const targetAgentId = selectNextPendingGuidedSetupRetryAgentId({
+    const autoRetryIntent = resolvePendingSetupAutoRetryIntent({
+      status,
+      agentsLoadedOnce,
+      loadedScopeMatches: pendingCreateSetupsLoadedScope === pendingGuidedSetupGatewayScope,
+      hasActiveCreateBlock: Boolean(createAgentBlock && createAgentBlock.phase !== "queued"),
+      retryBusyAgentId: retryPendingSetupBusyAgentId,
       pendingSetupsByAgentId: pendingCreateSetupsByAgentId,
       knownAgentIds: new Set(agents.map((agent) => agent.agentId)),
       attemptedAgentIds: pendingSetupAutoRetryAttemptedRef.current,
       inFlightAgentIds: pendingSetupAutoRetryInFlightRef.current,
     });
-    if (!targetAgentId) return;
-    pendingSetupAutoRetryAttemptedRef.current.add(targetAgentId);
+    if (autoRetryIntent.kind !== "retry") return;
+    pendingSetupAutoRetryAttemptedRef.current.add(autoRetryIntent.agentId);
     void applyPendingCreateSetupForAgentId({
-      agentId: targetAgentId,
+      agentId: autoRetryIntent.agentId,
       source: "auto",
     });
   }, [
@@ -1455,9 +1451,13 @@ const AgentStudioPage = () => {
 
   const handleDeleteAgent = useCallback(
     async (agentId: string) => {
-      if (deleteAgentBlock) return;
-      if (createAgentBlock) return;
-      if (renameAgentBlock) return;
+      const guard = resolveMutationStartGuard({
+        status: "connected",
+        hasCreateBlock: Boolean(createAgentBlock),
+        hasRenameBlock: Boolean(renameAgentBlock),
+        hasDeleteBlock: Boolean(deleteAgentBlock),
+      });
+      if (guard.kind === "deny") return;
       if (agentId === RESERVED_MAIN_AGENT_ID) {
         setError("The main agent cannot be deleted.");
         return;
@@ -1468,12 +1468,18 @@ const AgentStudioPage = () => {
         `Delete ${agent.name}? This removes the agent from gateway config + cron and moves its workspace/state into ~/.openclaw/trash on the gateway host.`
       );
       if (!confirmed) return;
-      setDeleteAgentBlock({
+      const queuedDeleteBlock = buildQueuedMutationBlock({
+        kind: "delete-agent",
         agentId,
         agentName: agent.name,
-        phase: "queued",
         startedAt: Date.now(),
-        sawDisconnect: false,
+      });
+      setDeleteAgentBlock({
+        agentId: queuedDeleteBlock.agentId,
+        agentName: queuedDeleteBlock.agentName,
+        phase: "queued",
+        startedAt: queuedDeleteBlock.startedAt,
+        sawDisconnect: queuedDeleteBlock.sawDisconnect,
       });
       try {
         await enqueueConfigMutation({
@@ -1507,21 +1513,20 @@ const AgentStudioPage = () => {
                   }),
               }
             );
-            const effects = resolveConfigMutationPostRunEffects(result);
-            if (effects.shouldReloadAgents) {
+            const postRunIntent = resolveMutationPostRunIntent({
+              disposition: result.disposition,
+            });
+            if (postRunIntent.kind === "clear") {
               await loadAgents();
-            }
-            if (effects.shouldClearBlock) {
               setDeleteAgentBlock(null);
               setMobilePane("chat");
               return;
             }
-            if (!effects.awaitingRestartPatch) return;
             setDeleteAgentBlock((current) => {
               if (!current || current.agentId !== agentId) return current;
               return {
                 ...current,
-                ...effects.awaitingRestartPatch,
+                ...postRunIntent.patch,
               };
             });
           },
@@ -1726,10 +1731,14 @@ const AgentStudioPage = () => {
   const handleCreateAgentSubmit = useCallback(
     async (payload: AgentCreateModalSubmitPayload) => {
       if (createAgentBusy) return;
-      if (createAgentBlock) return;
-      if (deleteAgentBlock) return;
-      if (renameAgentBlock) return;
-      if (status !== "connected") {
+      const guard = resolveMutationStartGuard({
+        status,
+        hasCreateBlock: Boolean(createAgentBlock),
+        hasRenameBlock: Boolean(renameAgentBlock),
+        hasDeleteBlock: Boolean(deleteAgentBlock),
+      });
+      if (guard.kind === "deny") {
+        if (guard.reason !== "not-connected") return;
         setCreateAgentModalError("Connect to gateway before creating an agent.");
         return;
       }
@@ -1754,11 +1763,17 @@ const AgentStudioPage = () => {
 
       setCreateAgentBusy(true);
       setCreateAgentModalError(null);
+      const queuedCreateBlock = buildQueuedMutationBlock({
+        kind: "create-agent",
+        agentId: "",
+        agentName: name,
+        startedAt: Date.now(),
+      });
       setCreateAgentBlock({
         agentId: null,
-        agentName: name,
+        agentName: queuedCreateBlock.agentName,
         phase: "queued",
-        startedAt: Date.now(),
+        startedAt: queuedCreateBlock.startedAt,
       });
       try {
         await enqueueConfigMutation({
@@ -2277,18 +2292,28 @@ const AgentStudioPage = () => {
 
   const handleRenameAgent = useCallback(
     async (agentId: string, name: string) => {
-      if (deleteAgentBlock) return false;
-      if (createAgentBlock) return false;
-      if (renameAgentBlock) return false;
+      const guard = resolveMutationStartGuard({
+        status: "connected",
+        hasCreateBlock: Boolean(createAgentBlock),
+        hasRenameBlock: Boolean(renameAgentBlock),
+        hasDeleteBlock: Boolean(deleteAgentBlock),
+      });
+      if (guard.kind === "deny") return false;
       const agent = agents.find((entry) => entry.agentId === agentId);
       if (!agent) return false;
       try {
-        setRenameAgentBlock({
+        const queuedRenameBlock = buildQueuedMutationBlock({
+          kind: "rename-agent",
           agentId,
           agentName: name,
-          phase: "queued",
           startedAt: Date.now(),
-          sawDisconnect: false,
+        });
+        setRenameAgentBlock({
+          agentId: queuedRenameBlock.agentId,
+          agentName: queuedRenameBlock.agentName,
+          phase: "queued",
+          startedAt: queuedRenameBlock.startedAt,
+          sawDisconnect: queuedRenameBlock.sawDisconnect,
         });
         await enqueueConfigMutation({
           kind: "rename-agent",
@@ -2321,21 +2346,20 @@ const AgentStudioPage = () => {
                   }),
               }
             );
-            const effects = resolveConfigMutationPostRunEffects(result);
-            if (effects.shouldReloadAgents) {
+            const postRunIntent = resolveMutationPostRunIntent({
+              disposition: result.disposition,
+            });
+            if (postRunIntent.kind === "clear") {
               await loadAgents();
-            }
-            if (effects.shouldClearBlock) {
               setRenameAgentBlock(null);
               setMobilePane("chat");
               return;
             }
-            if (!effects.awaitingRestartPatch) return;
             setRenameAgentBlock((current) => {
               if (!current || current.agentId !== agentId) return current;
               return {
                 ...current,
-                ...effects.awaitingRestartPatch,
+                ...postRunIntent.patch,
               };
             });
           },
