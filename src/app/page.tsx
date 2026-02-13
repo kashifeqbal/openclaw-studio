@@ -141,11 +141,12 @@ import {
   resolveLatestUpdateKind,
 } from "@/features/agents/operations/latestUpdateWorkflow";
 import {
-  buildReconcileTerminalPatch,
-  resolveReconcileEligibility,
-  resolveReconcileWaitOutcome,
   resolveSummarySnapshotIntent,
 } from "@/features/agents/operations/fleetLifecycleWorkflow";
+import {
+  executeAgentReconcileCommands,
+  runAgentReconcileOperation,
+} from "@/features/agents/operations/agentReconcileOperation";
 import {
   executeHistorySyncCommands,
   runHistorySyncOperation,
@@ -1225,50 +1226,41 @@ const AgentStudioPage = () => {
   const reconcileRunningAgents = useCallback(async () => {
     if (status !== "connected") return;
     const snapshot = stateRef.current.agents;
-    for (const agent of snapshot) {
-      const eligibility = resolveReconcileEligibility({
-        status: agent.status,
-        sessionCreated: agent.sessionCreated,
-        runId: agent.runId,
-      });
-      if (!eligibility.shouldCheck) continue;
-      const runId = agent.runId?.trim() ?? "";
-      if (reconcileRunInFlightRef.current.has(runId)) continue;
-
-      reconcileRunInFlightRef.current.add(runId);
-      try {
-        const result = (await client.call("agent.wait", {
-          runId,
-          timeoutMs: 1,
-        })) as { status?: unknown };
-        const outcome = resolveReconcileWaitOutcome(result?.status);
-        if (!outcome) {
-          continue;
-        }
-
-        const latest = stateRef.current.agents.find((entry) => entry.agentId === agent.agentId);
-        if (!latest || latest.runId !== runId || latest.status !== "running") {
-          continue;
-        }
-
+    const commands = await runAgentReconcileOperation({
+      client,
+      agents: snapshot,
+      getLatestAgent: (agentId) =>
+        stateRef.current.agents.find((entry) => entry.agentId === agentId) ?? null,
+      claimRunId: (runId) => {
+        const normalized = runId.trim();
+        if (!normalized) return false;
+        if (reconcileRunInFlightRef.current.has(normalized)) return false;
+        reconcileRunInFlightRef.current.add(normalized);
+        return true;
+      },
+      releaseRunId: (runId) => {
+        const normalized = runId.trim();
+        if (!normalized) return;
+        reconcileRunInFlightRef.current.delete(normalized);
+      },
+      isDisconnectLikeError: isGatewayDisconnectLikeError,
+    });
+    executeAgentReconcileCommands({
+      commands,
+      dispatch,
+      clearRunTracking: (runId) => {
         runtimeEventHandlerRef.current?.clearRunTracking(runId);
-        dispatch({
-          type: "updateAgent",
-          agentId: agent.agentId,
-          patch: buildReconcileTerminalPatch({ outcome }),
-        });
-        console.info(
-          `[agent-reconcile] ${agent.agentId} run ${runId} resolved as ${outcome}.`
-        );
-        void loadAgentHistory(agent.agentId);
-      } catch (err) {
-        if (!isGatewayDisconnectLikeError(err)) {
-          console.warn("Failed to reconcile running agent.", err);
-        }
-      } finally {
-        reconcileRunInFlightRef.current.delete(runId);
-      }
-    }
+      },
+      requestHistoryRefresh: (agentId) => {
+        void loadAgentHistory(agentId);
+      },
+      logInfo: (message) => {
+        console.info(message);
+      },
+      logWarn: (message, error) => {
+        console.warn(message, error);
+      },
+    });
   }, [client, dispatch, loadAgentHistory, status]);
 
   useEffect(() => {
