@@ -1643,7 +1643,7 @@ const AgentStudioPage = () => {
         startedAt: queuedCreateBlock.startedAt,
       });
       try {
-        await enqueueConfigMutation({
+        const queuedMutation = enqueueConfigMutation({
           kind: "create-agent",
           label: `Create ${name}`,
           run: async () => {
@@ -1711,6 +1711,8 @@ const AgentStudioPage = () => {
             }
           },
         });
+        setCreateAgentModalOpen(false);
+        await queuedMutation;
       } catch (err) {
         const message = err instanceof Error ? err.message : "Failed to create agent.";
         setCreateAgentBlock(null);
