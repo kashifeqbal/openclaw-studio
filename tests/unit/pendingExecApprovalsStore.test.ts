@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { PendingExecApproval } from "@/features/agents/approvals/types";
 import {
+  mergePendingApprovalsForFocusedAgent,
   removePendingApprovalEverywhere,
   nextPendingApprovalPruneDelayMs,
   pruneExpiredPendingApprovals,
@@ -171,5 +172,20 @@ describe("pending approval store", () => {
       graceMs: 500,
     });
     expect(none).toBeNull();
+  });
+
+  it("merges focused approvals without rendering duplicate ids", () => {
+    const unscopedA = createApproval("same", 10_000);
+    const unscopedB = createApproval("unscoped-only", 11_000);
+    const scopedSame = { ...createApproval("same", 12_000), agentId: "agent-2" };
+    const scopedC = { ...createApproval("scoped-only", 13_000), agentId: "agent-2" };
+
+    const merged = mergePendingApprovalsForFocusedAgent({
+      scopedApprovals: [scopedSame, scopedC],
+      unscopedApprovals: [unscopedA, unscopedB],
+    });
+
+    expect(merged.map((entry) => entry.id)).toEqual(["same", "unscoped-only", "scoped-only"]);
+    expect(merged[0]).toEqual(scopedSame);
   });
 });

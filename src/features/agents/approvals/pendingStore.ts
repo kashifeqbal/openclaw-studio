@@ -13,6 +13,29 @@ export const upsertPendingApproval = (
   return next;
 };
 
+export const mergePendingApprovalsForFocusedAgent = (params: {
+  scopedApprovals: PendingExecApproval[];
+  unscopedApprovals: PendingExecApproval[];
+}): PendingExecApproval[] => {
+  if (params.scopedApprovals.length === 0) return params.unscopedApprovals;
+  if (params.unscopedApprovals.length === 0) return params.scopedApprovals;
+  const merged = [...params.unscopedApprovals];
+  const seen = new Map<string, number>();
+  for (let index = 0; index < merged.length; index += 1) {
+    seen.set(merged[index]!.id, index);
+  }
+  for (const approval of params.scopedApprovals) {
+    const existingIndex = seen.get(approval.id);
+    if (existingIndex === undefined) {
+      seen.set(approval.id, merged.length);
+      merged.push(approval);
+      continue;
+    }
+    merged[existingIndex] = approval;
+  }
+  return merged;
+};
+
 export const updatePendingApprovalById = (
   approvals: PendingExecApproval[],
   approvalId: string,

@@ -111,6 +111,7 @@ import {
   resolveExecApprovalAgentId,
 } from "@/features/agents/approvals/execApprovalEvents";
 import {
+  mergePendingApprovalsForFocusedAgent,
   nextPendingApprovalPruneDelayMs,
   pruneExpiredPendingApprovals,
   pruneExpiredPendingApprovalsMap,
@@ -389,9 +390,10 @@ const AgentStudioPage = () => {
   const focusedPendingExecApprovals = useMemo(() => {
     if (!focusedAgentId) return unscopedPendingExecApprovals;
     const scoped = pendingExecApprovalsByAgentId[focusedAgentId] ?? [];
-    if (scoped.length === 0) return unscopedPendingExecApprovals;
-    if (unscopedPendingExecApprovals.length === 0) return scoped;
-    return [...unscopedPendingExecApprovals, ...scoped];
+    return mergePendingApprovalsForFocusedAgent({
+      scopedApprovals: scoped,
+      unscopedApprovals: unscopedPendingExecApprovals,
+    });
   }, [focusedAgentId, pendingExecApprovalsByAgentId, unscopedPendingExecApprovals]);
   const suggestedCreateAgentName = useMemo(() => {
     try {
