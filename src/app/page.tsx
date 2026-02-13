@@ -147,8 +147,8 @@ import {
   buildMutationSideEffectCommands,
   buildQueuedMutationBlock,
   resolveMutationStartGuard,
-  resolvePendingSetupAutoRetryIntent,
 } from "@/features/agents/operations/agentMutationLifecycleController";
+import { runPendingGuidedSetupAutoRetryViaStudio } from "@/features/agents/operations/pendingGuidedSetupAutoRetryOperation";
 
 type ChatHistoryMessage = Record<string, unknown>;
 
@@ -919,7 +919,7 @@ const AgentStudioPage = () => {
   }, [pendingCreateSetupsByAgentId, pendingCreateSetupsLoadedScope, pendingGuidedSetupGatewayScope]);
 
   useEffect(() => {
-    const autoRetryIntent = resolvePendingSetupAutoRetryIntent({
+    void runPendingGuidedSetupAutoRetryViaStudio({
       status,
       agentsLoadedOnce,
       loadedScopeMatches: pendingCreateSetupsLoadedScope === pendingGuidedSetupGatewayScope,
@@ -929,12 +929,11 @@ const AgentStudioPage = () => {
       knownAgentIds: new Set(agents.map((agent) => agent.agentId)),
       attemptedAgentIds: pendingSetupAutoRetryAttemptedRef.current,
       inFlightAgentIds: pendingSetupAutoRetryInFlightRef.current,
-    });
-    if (autoRetryIntent.kind !== "retry") return;
-    pendingSetupAutoRetryAttemptedRef.current.add(autoRetryIntent.agentId);
-    void applyPendingCreateSetupForAgentId({
-      agentId: autoRetryIntent.agentId,
-      source: "auto",
+      applyRetry: (agentId) =>
+        applyPendingCreateSetupForAgentId({
+          agentId,
+          source: "auto",
+        }),
     });
   }, [
     agents,
