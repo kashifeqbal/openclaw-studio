@@ -22,11 +22,13 @@ export async function sendChatMessageViaStudio(params: {
   sessionKey: string;
   message: string;
   clearRunTracking?: (runId: string) => void;
+  echoUserMessage?: boolean;
   now?: () => number;
   generateRunId?: () => string;
 }): Promise<void> {
   const trimmed = params.message.trim();
   if (!trimmed) return;
+  const echoUserMessage = params.echoUserMessage !== false;
 
   const generateRunId = params.generateRunId ?? (() => randomUUID());
   const now = params.now ?? (() => Date.now());
@@ -75,36 +77,38 @@ export async function sendChatMessageViaStudio(params: {
       streamText: "",
       thinkingTrace: null,
       draft: "",
-      lastUserMessage: trimmed,
+      ...(echoUserMessage ? { lastUserMessage: trimmed } : {}),
       lastActivityAt: userTimestamp,
     },
   });
-  params.dispatch({
-    type: "appendOutput",
-    agentId,
-    line: formatMetaMarkdown({ role: "user", timestamp: userTimestamp }),
-    transcript: {
-      source: "local-send",
-      runId,
-      sessionKey: params.sessionKey,
-      timestampMs: userTimestamp,
-      role: "user",
-      kind: "meta",
-    },
-  });
-  params.dispatch({
-    type: "appendOutput",
-    agentId,
-    line: `> ${trimmed}`,
-    transcript: {
-      source: "local-send",
-      runId,
-      sessionKey: params.sessionKey,
-      timestampMs: userTimestamp,
-      role: "user",
-      kind: "user",
-    },
-  });
+  if (echoUserMessage) {
+    params.dispatch({
+      type: "appendOutput",
+      agentId,
+      line: formatMetaMarkdown({ role: "user", timestamp: userTimestamp }),
+      transcript: {
+        source: "local-send",
+        runId,
+        sessionKey: params.sessionKey,
+        timestampMs: userTimestamp,
+        role: "user",
+        kind: "meta",
+      },
+    });
+    params.dispatch({
+      type: "appendOutput",
+      agentId,
+      line: `> ${trimmed}`,
+      transcript: {
+        source: "local-send",
+        runId,
+        sessionKey: params.sessionKey,
+        timestampMs: userTimestamp,
+        role: "user",
+        kind: "user",
+      },
+    });
+  }
 
   try {
     if (!params.sessionKey) {

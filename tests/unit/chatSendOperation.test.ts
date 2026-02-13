@@ -202,6 +202,38 @@ describe("sendChatMessageViaStudio", () => {
     );
   });
 
+  it("supports_internal_send_without_local_user_echo", async () => {
+    const agent = createAgent({ sessionSettingsSynced: true });
+    const dispatch = vi.fn();
+    const call = vi.fn(async () => ({ ok: true }));
+
+    await sendChatMessageViaStudio({
+      client: { call },
+      dispatch,
+      getAgent: () => agent,
+      agentId: agent.agentId,
+      sessionKey: agent.sessionKey,
+      message: "internal follow-up",
+      echoUserMessage: false,
+      now: () => 1234,
+      generateRunId: () => "run-1",
+    });
+
+    const dispatchedActions = dispatch.mock.calls.map((entry) => entry[0]);
+    expect(
+      dispatchedActions.some(
+        (action) => action.type === "appendOutput" && action.line === "> internal follow-up"
+      )
+    ).toBe(false);
+    const runningUpdate = dispatchedActions.find(
+      (action) => action.type === "updateAgent" && action.patch?.status === "running"
+    );
+    expect(runningUpdate).toBeTruthy();
+    if (runningUpdate && runningUpdate.type === "updateAgent") {
+      expect(runningUpdate.patch.lastUserMessage).toBeUndefined();
+    }
+  });
+
   it("marks_error_on_gateway_failure", async () => {
     const agent = createAgent({ sessionSettingsSynced: true });
     const dispatch = vi.fn();
