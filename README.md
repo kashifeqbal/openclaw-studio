@@ -106,6 +106,10 @@ See `docs/ui-guide.md` for UI workflows (agent creation, cron jobs, exec approva
 
 See `docs/pi-chat-streaming.md` for how Studio bridges browser WebSocket traffic to the upstream Gateway, how runtime streaming arrives (`chat`/`agent` events), and how the chat UI renders tool calls, thinking traces, and final transcript lines.
 
+## Permissions + sandboxing
+
+See `docs/permissions-sandboxing.md` for how agent creation choices (tool policy, sandbox config, exec approvals) flow from Studio into the OpenClaw Gateway and how upstream OpenClaw enforces them at runtime (workspaces, sandbox mounts, tool availability, and exec approval prompts).
+
 ## Troubleshooting
 
 If the UI loads but “Connect” fails, it’s usually Studio->Gateway:
