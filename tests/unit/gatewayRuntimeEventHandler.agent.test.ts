@@ -439,6 +439,14 @@ describe("gateway runtime event handler (agent)", () => {
         },
       } as EventFrame);
 
+      expect(
+        actions.some((a) => {
+          if (a.type !== "updateAgent") return false;
+          const patch = a.patch as Record<string, unknown>;
+          return patch.status === "idle" && patch.runId === null;
+        })
+      ).toBe(false);
+
       vi.runAllTimers();
 
       expect(actions.some((a) => a.type === "appendOutput" && a.line === "final text")).toBe(true);

@@ -1040,6 +1040,7 @@ export function createGatewayRuntimeEventHandler(
     const shouldScheduleFallback =
       phase === "end" && Boolean(terminalState && !terminalState.chatFinalSeen);
     let deferredClearRunTracking = false;
+    let deferTerminalTransitionDispatch = false;
     if (shouldScheduleFallback) {
       const normalizedStreamText = agent.streamText
         ? normalizeAssistantDisplayText(agent.streamText)
@@ -1047,7 +1048,7 @@ export function createGatewayRuntimeEventHandler(
       const finalText = normalizedStreamText.length > 0 ? normalizedStreamText : null;
       if (finalText && terminalState) {
         cancelLifecycleFallback(payload.runId);
-        const fallbackTimerId = deps.setTimeout(() => {
+        const commitLifecycleFallback = () => {
           const currentState = getRunTerminalState(payload.runId, false);
           if (!currentState) return;
           currentState.fallbackTimerId = null;
@@ -1079,9 +1080,19 @@ export function createGatewayRuntimeEventHandler(
           markRunTerminalCommit(payload.runId, "lifecycle-fallback", null);
           markRunClosed(payload.runId);
           clearRunTracking(payload.runId);
-        }, LIFECYCLE_FALLBACK_DELAY_MS);
+          deps.dispatch({
+            type: "updateAgent",
+            agentId: match,
+            patch: transition.patch,
+          });
+        };
+        const fallbackTimerId = deps.setTimeout(
+          commitLifecycleFallback,
+          LIFECYCLE_FALLBACK_DELAY_MS
+        );
         terminalState.fallbackTimerId = fallbackTimerId;
         deferredClearRunTracking = true;
+        deferTerminalTransitionDispatch = true;
       } else {
         clearRunTerminalState(payload.runId);
       }
@@ -1097,11 +1108,13 @@ export function createGatewayRuntimeEventHandler(
         clearRunTracking(payload.runId);
       }
     }
-    deps.dispatch({
-      type: "updateAgent",
-      agentId: match,
-      patch: transition.patch,
-    });
+    if (!deferTerminalTransitionDispatch) {
+      deps.dispatch({
+        type: "updateAgent",
+        agentId: match,
+        patch: transition.patch,
+      });
+    }
   };
 
   const handleEvent = (event: EventFrame) => {
