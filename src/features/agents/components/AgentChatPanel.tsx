@@ -685,7 +685,8 @@ const AgentChatTranscript = memo(function AgentChatTranscript({
     };
   }, []);
 
-  const showLiveAssistantCard = Boolean(liveThinkingText || liveAssistantText || showTypingIndicator);
+  const showLiveAssistantCard =
+    status === "running" && Boolean(liveThinkingText || liveAssistantText || showTypingIndicator);
   const hasApprovals = pendingExecApprovals.length > 0;
   const hasTranscriptContent = chatItems.length > 0 || hasApprovals;
 
@@ -749,7 +750,7 @@ const AgentChatTranscript = memo(function AgentChatTranscript({
                 running={status === "running"}
                 runStartedAt={runStartedAt}
               />
-              {liveThinkingText || liveAssistantText || showTypingIndicator ? (
+              {showLiveAssistantCard ? (
                 <AssistantMessageCard
                   avatarSeed={avatarSeed}
                   avatarUrl={avatarUrl}
@@ -974,9 +975,11 @@ export const AgentChatPanel = ({
       }),
     [agent.outputLines, agent.showThinkingTraces, agent.toolCallingEnabled]
   );
-  const liveAssistantText = agent.streamText ? normalizeAssistantDisplayText(agent.streamText) : "";
+  const running = agent.status === "running";
+  const liveAssistantText =
+    running && agent.streamText ? normalizeAssistantDisplayText(agent.streamText) : "";
   const liveThinkingText =
-    agent.showThinkingTraces && agent.thinkingTrace ? agent.thinkingTrace.trim() : "";
+    running && agent.showThinkingTraces && agent.thinkingTrace ? agent.thinkingTrace.trim() : "";
   const hasLiveAssistantText = Boolean(liveAssistantText.trim());
   const hasVisibleLiveThinking = Boolean(liveThinkingText.trim());
   const latestUserOutputIndex = useMemo(() => {
@@ -1005,7 +1008,7 @@ export const AgentChatPanel = ({
     return false;
   }, [agent.outputLines, agent.showThinkingTraces, latestUserOutputIndex]);
   const showTypingIndicator =
-    agent.status === "running" &&
+    running &&
     !hasLiveAssistantText &&
     !hasVisibleLiveThinking &&
     !hasSavedThinkingSinceLatestUser;
@@ -1032,7 +1035,6 @@ export const AgentChatPanel = ({
   const allowThinking = selectedModel?.reasoning !== false;
 
   const avatarSeed = agent.avatarSeed ?? agent.agentId;
-  const running = agent.status === "running";
   const sendDisabled = !canSend || running || !draftValue.trim();
 
   const handleComposerChange = useCallback(
@@ -1167,23 +1169,23 @@ export const AgentChatPanel = ({
       </div>
 
       <div className="mt-3 flex min-h-0 flex-1 flex-col px-3 pb-3 sm:px-4 sm:pb-4">
-	        <AgentChatTranscript
-	          agentId={agent.agentId}
-	          name={agent.name}
-	          avatarSeed={avatarSeed}
-	          avatarUrl={agent.avatarUrl ?? null}
-	          status={agent.status}
-	          historyMaybeTruncated={agent.historyMaybeTruncated}
-	          historyFetchedCount={agent.historyFetchedCount}
-	          historyFetchLimit={agent.historyFetchLimit}
-	          onLoadMoreHistory={onLoadMoreHistory}
-	          chatItems={chatItems}
-	          liveThinkingText={liveThinkingText}
-	          liveAssistantText={liveAssistantText}
-	          showTypingIndicator={showTypingIndicator}
-	          outputLineCount={agent.outputLines.length}
-          liveAssistantCharCount={agent.streamText?.length ?? 0}
-          liveThinkingCharCount={agent.thinkingTrace?.length ?? 0}
+        <AgentChatTranscript
+          agentId={agent.agentId}
+          name={agent.name}
+          avatarSeed={avatarSeed}
+          avatarUrl={agent.avatarUrl ?? null}
+          status={agent.status}
+          historyMaybeTruncated={agent.historyMaybeTruncated}
+          historyFetchedCount={agent.historyFetchedCount}
+          historyFetchLimit={agent.historyFetchLimit}
+          onLoadMoreHistory={onLoadMoreHistory}
+          chatItems={chatItems}
+          liveThinkingText={liveThinkingText}
+          liveAssistantText={liveAssistantText}
+          showTypingIndicator={showTypingIndicator}
+          outputLineCount={agent.outputLines.length}
+          liveAssistantCharCount={liveAssistantText.length}
+          liveThinkingCharCount={liveThinkingText.length}
           runStartedAt={agent.runStartedAt}
           scrollToBottomNextOutputRef={scrollToBottomNextOutputRef}
           pendingExecApprovals={pendingExecApprovals}
