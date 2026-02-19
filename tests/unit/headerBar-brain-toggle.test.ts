@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { HeaderBar } from "@/features/agents/components/HeaderBar";
 
-describe("HeaderBar brain toggle", () => {
+describe("HeaderBar controls", () => {
   beforeEach(() => {
     vi.stubGlobal(
       "matchMedia",
@@ -25,23 +25,15 @@ describe("HeaderBar brain toggle", () => {
     vi.unstubAllGlobals();
   });
 
-  it("renders_brain_toggle_and_calls_handler", () => {
-    const onBrainFiles = vi.fn();
-
+  it("does_not_render_brain_toggle_in_header", () => {
     render(
       createElement(HeaderBar, {
         status: "disconnected",
         onConnectionSettings: vi.fn(),
-        onBrainFiles,
-        brainFilesOpen: false,
       })
     );
 
-    const brainToggle = screen.getByTestId("brain-files-toggle");
-    expect(brainToggle).toBeInTheDocument();
-
-    fireEvent.click(brainToggle);
-    expect(onBrainFiles).toHaveBeenCalledTimes(1);
+    expect(screen.queryByTestId("brain-files-toggle")).not.toBeInTheDocument();
   });
 
   it("opens_menu_and_calls_connection_settings_handler", () => {
@@ -51,8 +43,6 @@ describe("HeaderBar brain toggle", () => {
       createElement(HeaderBar, {
         status: "disconnected",
         onConnectionSettings,
-        onBrainFiles: vi.fn(),
-        brainFilesOpen: false,
       })
     );
 

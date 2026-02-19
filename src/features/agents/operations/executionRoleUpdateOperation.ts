@@ -5,25 +5,17 @@ import {
   upsertGatewayAgentExecApprovals,
 } from "@/lib/gateway/execApprovals";
 import { readConfigAgentList, updateGatewayAgentOverrides } from "@/lib/gateway/agentConfig";
+import {
+  resolveExecApprovalsPolicyForRole,
+  resolveSessionExecSettingsForRole,
+  type ExecutionRoleId,
+} from "@/features/agents/operations/agentPermissionsOperation";
 
-export type ExecutionRoleId = "conservative" | "collaborative" | "autonomous";
-
-export function resolveExecApprovalsPolicyForRole(params: {
-  role: ExecutionRoleId;
-  allowlist: Array<{ pattern: string }>;
-}):
-  | {
-      security: "full" | "allowlist";
-      ask: "off" | "always";
-      allowlist: Array<{ pattern: string }>;
-    }
-  | null {
-  if (params.role === "conservative") return null;
-  if (params.role === "autonomous") {
-    return { security: "full", ask: "off", allowlist: params.allowlist };
-  }
-  return { security: "allowlist", ask: "always", allowlist: params.allowlist };
-}
+export type { ExecutionRoleId } from "@/features/agents/operations/agentPermissionsOperation";
+export {
+  resolveExecApprovalsPolicyForRole,
+  resolveSessionExecSettingsForRole,
+} from "@/features/agents/operations/agentPermissionsOperation";
 
 const coerceStringArray = (value: unknown): string[] | null => {
   if (!Array.isArray(value)) return null;
@@ -64,26 +56,6 @@ export function resolveRuntimeToolOverridesForRole(params: {
   return {
     tools: usesAllow ? { allow: allowedList, deny: denyList } : { alsoAllow: allowedList, deny: denyList },
   };
-}
-
-export function resolveSessionExecSettingsForRole(params: {
-  role: ExecutionRoleId;
-  sandboxMode: string;
-}): {
-  execHost: "sandbox" | "gateway" | null;
-  execSecurity: "deny" | "allowlist" | "full";
-  execAsk: "off" | "always";
-} {
-  if (params.role === "conservative") {
-    return { execHost: null, execSecurity: "deny", execAsk: "off" };
-  }
-
-  const normalizedMode = params.sandboxMode.trim().toLowerCase();
-  const execHost = normalizedMode === "all" ? "sandbox" : "gateway";
-  if (params.role === "autonomous") {
-    return { execHost, execSecurity: "full", execAsk: "off" };
-  }
-  return { execHost, execSecurity: "allowlist", execAsk: "always" };
 }
 
 export async function updateExecutionRoleViaStudio(params: {
@@ -163,4 +135,3 @@ export async function updateExecutionRoleViaStudio(params: {
 
   await params.loadAgents();
 }
-

@@ -13,11 +13,11 @@ This doc covers common UI workflows after you are connected to a gateway.
 ## Agent creation workflow
 
 - Click **New Agent** in the fleet sidebar.
-- Pick a **Preset bundle** (for example Research Analyst, PR Engineer, Autonomous Engineer, Growth Operator, Coordinator, or Blank).
-- Each preset card shows capability chips and risk level (`Exec`, `Internet`, `File tools`, `Sandbox`, `Heartbeat`, plus caveats when relevant).
-- Optionally override the **Control level** (Conservative, Balanced, or Autopilot).
-- Add optional customization (agent name, first task, notes, and advanced control toggles).
-- Review the behavior summary, then create.
+- Enter an agent name and avatar, then create.
+- The create modal does not include permission controls.
+- After create succeeds, Studio opens **Settings** for the new agent automatically.
+- New agents bootstrap to **Autonomous** command mode by default.
+- Use **Settings -> Permissions** for preset controls (Conservative, Collaborative, Autonomous) and optional advanced controls (`Command mode`, `Web access`, `File tools`).
 
 ## Exec approvals in chat
 
@@ -31,4 +31,3 @@ This doc covers common UI workflows after you are connected to a gateway.
   - **Deny**
 - The fleet row displays **Needs approval** while approvals are pending for that agent.
 - Expired approvals are pruned automatically, so stale cards and stale **Needs approval** badges clear without a manual resolve event.
-

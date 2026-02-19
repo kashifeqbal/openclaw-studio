@@ -16,15 +16,15 @@ type ConnectionPanelProps = {
 const statusStyles: Record<GatewayStatus, { label: string; className: string }> = {
   disconnected: {
     label: "Disconnected",
-    className: "border border-border/70 bg-muted text-muted-foreground",
+    className: "ui-chip border-border/70 bg-muted px-3 py-1 text-muted-foreground",
   },
   connecting: {
     label: "Connecting",
-    className: "border border-border/70 bg-secondary text-secondary-foreground",
+    className: "ui-chip border-border/70 bg-secondary px-3 py-1 text-secondary-foreground",
   },
   connected: {
     label: "Connected",
-    className: "border border-primary/30 bg-primary/15 text-foreground",
+    className: "ui-chip border-primary/30 bg-primary/15 px-3 py-1 text-foreground",
   },
 };
 
@@ -48,12 +48,12 @@ export const ConnectionPanel = ({
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-3">
           <span
-            className={`inline-flex items-center rounded-md px-3 py-1 font-mono text-[10px] font-semibold uppercase tracking-[0.15em] ${statusConfig.className}`}
+            className={`inline-flex items-center font-mono text-[10px] font-semibold tracking-[0.08em] ${statusConfig.className}`}
           >
             {statusConfig.label}
           </span>
           <button
-            className="rounded-md border border-input/90 bg-surface-3 px-4 py-2 text-xs font-semibold uppercase tracking-[0.12em] text-foreground transition hover:border-border hover:bg-surface-2 disabled:cursor-not-allowed disabled:opacity-60"
+            className="ui-btn-secondary px-4 py-2 text-xs font-semibold tracking-[0.05em] text-foreground disabled:cursor-not-allowed disabled:opacity-60"
             type="button"
             onClick={isConnected ? onDisconnect : onConnect}
             disabled={isConnecting || !gatewayUrl.trim()}
@@ -63,7 +63,7 @@ export const ConnectionPanel = ({
         </div>
         {onClose ? (
           <button
-            className="inline-flex items-center gap-1 rounded-md border border-input/90 bg-surface-3 px-3 py-2 text-xs font-semibold uppercase tracking-[0.12em] text-foreground transition hover:border-border hover:bg-surface-2"
+            className="ui-btn-ghost inline-flex items-center gap-1 px-3 py-2 text-xs font-semibold tracking-[0.05em] text-foreground"
             type="button"
             onClick={onClose}
             data-testid="gateway-connection-close"
@@ -75,10 +75,10 @@ export const ConnectionPanel = ({
         ) : null}
       </div>
       <div className="grid gap-3 lg:grid-cols-[1.4fr_1fr]">
-        <label className="flex flex-col gap-1 font-mono text-[10px] font-semibold uppercase tracking-[0.15em] text-muted-foreground">
-          Upstream Gateway URL
+        <label className="flex flex-col gap-1 font-mono text-[10px] font-semibold tracking-[0.06em] text-muted-foreground">
+          Upstream gateway URL
           <input
-            className="h-10 rounded-md border border-input bg-surface-3 px-4 font-sans text-sm text-foreground outline-none transition"
+            className="ui-input h-10 rounded-md px-4 font-sans text-sm text-foreground outline-none"
             type="text"
             value={gatewayUrl}
             onChange={(event) => onGatewayUrlChange(event.target.value)}
@@ -86,10 +86,10 @@ export const ConnectionPanel = ({
             spellCheck={false}
           />
         </label>
-        <label className="flex flex-col gap-1 font-mono text-[10px] font-semibold uppercase tracking-[0.15em] text-muted-foreground">
-          Upstream Token
+        <label className="flex flex-col gap-1 font-mono text-[10px] font-semibold tracking-[0.06em] text-muted-foreground">
+          Upstream token
           <input
-            className="h-10 rounded-md border border-input bg-surface-3 px-4 font-sans text-sm text-foreground outline-none transition"
+            className="ui-input h-10 rounded-md px-4 font-sans text-sm text-foreground outline-none"
             type="password"
             value={token}
             onChange={(event) => onTokenChange(event.target.value)}

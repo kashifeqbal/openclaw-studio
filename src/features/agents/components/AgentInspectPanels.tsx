@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { Bell, CalendarDays, ListChecks, Play, Sun, Trash2 } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Bell, CalendarDays, ListChecks, Play, Sun, Trash2, X } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
@@ -11,6 +11,11 @@ import { formatCronPayload, formatCronSchedule, type CronJobSummary } from "@/li
 import type { GatewayClient } from "@/lib/gateway/GatewayClient";
 import type { AgentHeartbeatSummary } from "@/lib/gateway/agentConfig";
 import { readGatewayAgentFile, writeGatewayAgentFile } from "@/lib/gateway/agentFiles";
+import {
+  resolveExecutionRoleFromAgent,
+  resolvePresetDefaultsForRole,
+  type AgentPermissionsDraft,
+} from "@/features/agents/operations/agentPermissionsOperation";
 import {
   AGENT_FILE_META,
   AGENT_FILE_NAMES,
@@ -33,22 +38,34 @@ const AgentInspectHeader = ({
   closeTestId: string;
   closeDisabled?: boolean;
 }) => {
+  const hasLabel = label.trim().length > 0;
   return (
-    <div className="flex items-center justify-between border-b border-border/80 px-4 py-3">
+    <div className="flex items-center justify-between pl-4 pr-2 py-4">
       <div>
-        <div className="font-mono text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-          {label}
+        {hasLabel ? (
+          <div className="font-mono text-[9px] font-medium tracking-[0.04em] text-muted-foreground/58">
+            {label}
+          </div>
+        ) : null}
+        <div
+          className={
+            hasLabel
+              ? "text-[1.45rem] font-semibold leading-[1.05] tracking-[0.01em] text-foreground"
+              : "font-mono text-[12px] font-semibold tracking-[0.05em] text-foreground"
+          }
+        >
+          {title}
         </div>
-        <div className="console-title text-2xl leading-none text-foreground">{title}</div>
       </div>
       <button
-        className="rounded-md border border-border/80 bg-surface-3 px-3 py-2 font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground transition hover:border-border hover:bg-surface-2"
+        className="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground/55 transition hover:bg-surface-2 hover:text-muted-foreground/85"
         type="button"
         data-testid={closeTestId}
+        aria-label="Close panel"
         disabled={closeDisabled}
         onClick={onClose}
       >
-        Close
+        <X className="h-4 w-4" aria-hidden="true" />
       </button>
     </div>
   );
@@ -58,7 +75,8 @@ type AgentSettingsPanelProps = {
   agent: AgentState;
   onClose: () => void;
   onRename: (value: string) => Promise<boolean>;
-  onUpdateExecutionRole?: (role: "conservative" | "collaborative" | "autonomous") => Promise<void> | void;
+  permissionsDraft?: AgentPermissionsDraft;
+  onUpdateAgentPermissions?: (draft: AgentPermissionsDraft) => Promise<void> | void;
   onNewSession: () => Promise<void> | void;
   onDelete: () => void;
   canDelete?: boolean;
@@ -130,35 +148,35 @@ const CRON_TEMPLATE_OPTIONS: CronTemplateOption[] = [
     title: "Morning Brief",
     description: "Daily status summary with overnight updates.",
     icon: Sun,
-    accent: "border-amber-400/40 bg-amber-500/10",
+    accent: "bg-amber-500/10",
   },
   {
     id: "reminder",
     title: "Reminder",
     description: "A timed nudge for a specific event or task.",
     icon: Bell,
-    accent: "border-cyan-400/40 bg-cyan-500/10",
+    accent: "bg-cyan-500/10",
   },
   {
     id: "weekly-review",
     title: "Weekly Review",
     description: "Recurring synthesis across a longer time window.",
     icon: CalendarDays,
-    accent: "border-emerald-400/40 bg-emerald-500/10",
+    accent: "bg-emerald-500/10",
   },
   {
     id: "inbox-triage",
     title: "Inbox Triage",
     description: "Regular sorting and summarizing of incoming updates.",
     icon: ListChecks,
-    accent: "border-orange-400/40 bg-orange-500/10",
+    accent: "bg-orange-500/10",
   },
   {
     id: "custom",
     title: "Custom",
     description: "Start from a blank flow and choose each setting.",
     icon: ListChecks,
-    accent: "border-violet-400/40 bg-violet-500/10",
+    accent: "bg-violet-500/10",
   },
 ];
 
@@ -249,7 +267,8 @@ export const AgentSettingsPanel = ({
   agent,
   onClose,
   onRename,
-  onUpdateExecutionRole = () => {},
+  permissionsDraft,
+  onUpdateAgentPermissions = () => {},
   onNewSession,
   onDelete,
   canDelete = true,
@@ -276,11 +295,15 @@ export const AgentSettingsPanel = ({
   const [renameSaving, setRenameSaving] = useState(false);
   const [renameError, setRenameError] = useState<string | null>(null);
   const [sessionBusy, setSessionBusy] = useState(false);
-  const [executionRoleDraft, setExecutionRoleDraft] = useState<
-    "conservative" | "collaborative" | "autonomous"
-  >("collaborative");
-  const [executionRoleSaving, setExecutionRoleSaving] = useState(false);
-  const [executionRoleError, setExecutionRoleError] = useState<string | null>(null);
+  const [permissionsDraftValue, setPermissionsDraftValue] = useState<AgentPermissionsDraft>(
+    permissionsDraft ?? resolvePresetDefaultsForRole(resolveExecutionRoleFromAgent(agent))
+  );
+  const [permissionsSaving, setPermissionsSaving] = useState(false);
+  const [permissionsSaveState, setPermissionsSaveState] = useState<
+    "idle" | "saving" | "saved" | "error"
+  >("idle");
+  const [permissionsSaveError, setPermissionsSaveError] = useState<string | null>(null);
+  const permissionsSaveTimerRef = useRef<number | null>(null);
   const [expandedCronJobIds, setExpandedCronJobIds] = useState<Set<string>>(() => new Set());
   const [cronCreateOpen, setCronCreateOpen] = useState(false);
   const [cronCreateStep, setCronCreateStep] = useState(0);
@@ -292,21 +315,25 @@ export const AgentSettingsPanel = ({
     setRenameError(null);
   }, [agent.agentId, agent.name]);
 
-  const resolvedExecutionRole: "conservative" | "collaborative" | "autonomous" = useMemo(() => {
-    if (agent.sessionExecSecurity === "full" && agent.sessionExecAsk === "off") {
-      return "autonomous";
-    }
-    if (agent.sessionExecSecurity === "allowlist" || agent.sessionExecAsk === "always" || agent.sessionExecAsk === "on-miss") {
-      return "collaborative";
-    }
-    return "conservative";
-  }, [agent.sessionExecAsk, agent.sessionExecSecurity]);
+  const resolvedExecutionRole = useMemo(() => resolveExecutionRoleFromAgent(agent), [agent]);
+  const resolvedPermissionsDraft = useMemo(
+    () => permissionsDraft ?? resolvePresetDefaultsForRole(resolvedExecutionRole),
+    [permissionsDraft, resolvedExecutionRole]
+  );
+  const permissionsDirty = useMemo(
+    () =>
+      permissionsDraftValue.commandMode !== resolvedPermissionsDraft.commandMode ||
+      permissionsDraftValue.webAccess !== resolvedPermissionsDraft.webAccess ||
+      permissionsDraftValue.fileTools !== resolvedPermissionsDraft.fileTools,
+    [permissionsDraftValue, resolvedPermissionsDraft]
+  );
 
   useEffect(() => {
-    setExecutionRoleDraft(resolvedExecutionRole);
-    setExecutionRoleError(null);
-    setExecutionRoleSaving(false);
-  }, [agent.agentId, resolvedExecutionRole]);
+    setPermissionsDraftValue(resolvedPermissionsDraft);
+    setPermissionsSaveState("idle");
+    setPermissionsSaveError(null);
+    setPermissionsSaving(false);
+  }, [agent.agentId, resolvedExecutionRole, resolvedPermissionsDraft]);
 
   const handleRename = async () => {
     const next = nameDraft.trim();
@@ -341,23 +368,49 @@ export const AgentSettingsPanel = ({
     }
   };
 
-  const handleUpdateExecutionRole = async () => {
-    if (executionRoleSaving) return;
-    if (executionRoleDraft === resolvedExecutionRole) {
-      setExecutionRoleError(null);
-      return;
-    }
-    setExecutionRoleSaving(true);
-    setExecutionRoleError(null);
+  const runPermissionsSave = useCallback(async (draft: AgentPermissionsDraft) => {
+    if (permissionsSaving) return;
+    setPermissionsSaving(true);
+    setPermissionsSaveState("saving");
+    setPermissionsSaveError(null);
     try {
-      await onUpdateExecutionRole(executionRoleDraft);
+      await onUpdateAgentPermissions(draft);
+      setPermissionsSaveState("saved");
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Failed to update execution role.";
-      setExecutionRoleError(message);
+      const message = err instanceof Error ? err.message : "Failed to save permissions.";
+      setPermissionsSaveState("error");
+      setPermissionsSaveError(message);
     } finally {
-      setExecutionRoleSaving(false);
+      setPermissionsSaving(false);
     }
-  };
+  }, [onUpdateAgentPermissions, permissionsSaving]);
+
+  useEffect(() => {
+    return () => {
+      if (permissionsSaveTimerRef.current !== null) {
+        window.clearTimeout(permissionsSaveTimerRef.current);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!permissionsDirty) return;
+    if (permissionsSaving) return;
+    if (permissionsSaveTimerRef.current !== null) {
+      window.clearTimeout(permissionsSaveTimerRef.current);
+    }
+    setPermissionsSaveState("idle");
+    permissionsSaveTimerRef.current = window.setTimeout(() => {
+      permissionsSaveTimerRef.current = null;
+      void runPermissionsSave(permissionsDraftValue);
+    }, 450);
+    return () => {
+      if (permissionsSaveTimerRef.current !== null) {
+        window.clearTimeout(permissionsSaveTimerRef.current);
+        permissionsSaveTimerRef.current = null;
+      }
+    };
+  }, [permissionsDirty, permissionsDraftValue, permissionsSaving, runPermissionsSave]);
 
   const openCronCreate = () => {
     setCronCreateOpen(true);
@@ -452,22 +505,22 @@ export const AgentSettingsPanel = ({
       style={{ position: "relative", left: "auto", top: "auto", width: "100%", height: "100%" }}
     >
       <AgentInspectHeader
-        label="Agent settings"
-        title={agent.name}
+        label=""
+        title="Agent settings"
         onClose={onClose}
         closeTestId="agent-settings-close"
       />
 
-      <div className="flex flex-col gap-0 px-4 pb-4">
+      <div className="flex flex-col gap-0 px-5 pb-5">
         <section
-          className="border-t border-border/60 py-4 first:border-t-0"
+          className="sidebar-section"
           data-testid="agent-settings-identity"
         >
-          <label className="flex flex-col gap-2 font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-            <span>Agent name</span>
+          <label className="sidebar-copy mt-3 flex flex-col gap-2 text-[11px] text-muted-foreground">
+            <span className="font-medium text-foreground/88">Name</span>
             <input
               aria-label="Agent name"
-              className="h-10 rounded-md border border-border bg-surface-3 px-3 text-xs font-semibold text-foreground outline-none"
+              className="sidebar-input h-10 rounded-md px-3 text-xs font-semibold text-foreground outline-none"
               value={nameDraft}
               disabled={renameSaving}
               onChange={(event) => setNameDraft(event.target.value)}
@@ -478,9 +531,9 @@ export const AgentSettingsPanel = ({
               {renameError}
             </div>
           ) : null}
-          <div className="mt-3 flex justify-end">
+          <div className="mt-2">
             <button
-              className="rounded-md border border-transparent bg-primary px-4 py-2 font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-primary-foreground transition hover:brightness-105 disabled:cursor-not-allowed disabled:border-border disabled:bg-muted disabled:text-muted-foreground"
+              className="sidebar-btn-utility w-full px-4 py-2 font-mono text-[10px] font-semibold tracking-[0.06em] disabled:cursor-not-allowed disabled:text-muted-foreground/55"
               type="button"
               onClick={() => {
                 void handleRename();
@@ -493,87 +546,121 @@ export const AgentSettingsPanel = ({
         </section>
 
         <section
-          className="border-t border-border/60 py-4 first:border-t-0"
-          data-testid="agent-settings-execution"
+          className="sidebar-section"
+          data-testid="agent-settings-permissions"
         >
-          <div className="font-mono text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-            Execution role
+          <h3 className="sidebar-section-title">Permissions</h3>
+          <div className="mt-4 flex flex-col gap-8">
+            <div className="px-1 py-1">
+              <div className="sidebar-copy flex flex-col gap-1 text-[11px] text-muted-foreground">
+                <span className="font-medium text-foreground/88">Run commands</span>
+                <div className="ui-segment mt-2 grid-cols-3" role="group" aria-label="Run commands">
+                  {(
+                    [
+                      { id: "off", label: "Off" },
+                      { id: "ask", label: "Ask" },
+                      { id: "auto", label: "Auto" },
+                    ] as const
+                  ).map((option) => {
+                    const selected = permissionsDraftValue.commandMode === option.id;
+                    return (
+                      <button
+                        key={option.id}
+                        type="button"
+                        aria-label={`Run commands ${option.label.toLowerCase()}`}
+                        aria-pressed={selected}
+                        className="ui-segment-item px-2 py-1.5 text-center font-mono"
+                        data-active={selected ? "true" : "false"}
+                        onClick={() =>
+                          setPermissionsDraftValue((current) => ({
+                            ...current,
+                            commandMode: option.id,
+                          }))
+                        }
+                      >
+                        {option.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+            <div className="flex min-h-[68px] items-center justify-between gap-6 rounded-md bg-surface-2/55 px-4 py-3">
+              <div className="sidebar-copy flex flex-col">
+                <span className="text-[11px] font-medium text-foreground/88">Web access</span>
+              </div>
+              <button
+                type="button"
+                role="switch"
+                aria-label="Web access"
+                aria-checked={permissionsDraftValue.webAccess}
+                className={`ui-switch self-center ${permissionsDraftValue.webAccess ? "ui-switch--on" : ""}`}
+                onClick={() =>
+                  setPermissionsDraftValue((current) => ({
+                    ...current,
+                    webAccess: !current.webAccess,
+                  }))
+                }
+              >
+                <span className="ui-switch-thumb" />
+              </button>
+            </div>
+            <div className="flex min-h-[68px] items-center justify-between gap-6 rounded-md bg-surface-2/55 px-4 py-3">
+              <div className="sidebar-copy flex flex-col">
+                <span className="text-[11px] font-medium text-foreground/88">File tools</span>
+              </div>
+              <button
+                type="button"
+                role="switch"
+                aria-label="File tools"
+                aria-checked={permissionsDraftValue.fileTools}
+                className={`ui-switch self-center ${permissionsDraftValue.fileTools ? "ui-switch--on" : ""}`}
+                onClick={() =>
+                  setPermissionsDraftValue((current) => ({
+                    ...current,
+                    fileTools: !current.fileTools,
+                  }))
+                }
+              >
+                <span className="ui-switch-thumb" />
+              </button>
+            </div>
           </div>
-          <div className="mt-3 text-[11px] text-muted-foreground">
-            Controls whether this agent can run commands without approval prompts.
-          </div>
-          <div className="mt-3 grid gap-2">
-            {(
-              [
-                {
-                  id: "conservative" as const,
-                  title: "Conservative",
-                  description: "No command execution.",
-                },
-                {
-                  id: "collaborative" as const,
-                  title: "Collaborative",
-                  description: "Commands require approval.",
-                },
-                {
-                  id: "autonomous" as const,
-                  title: "Autonomous",
-                  description: "Commands run automatically.",
-                },
-              ] as const
-            ).map((option) => {
-              const selected = executionRoleDraft === option.id;
-              return (
+          <div className="sidebar-copy mt-3 text-[11px] text-muted-foreground">
+            {permissionsSaveState === "saving" ? "Saving..." : null}
+            {permissionsSaveState === "saved" ? "Saved." : null}
+            {permissionsSaveState === "error" && permissionsSaveError ? (
+              <span>
+                Couldn't save. {permissionsSaveError}{" "}
                 <button
-                  key={option.id}
                   type="button"
-                  className={`rounded-md border px-3 py-2 text-left transition ${
-                    selected
-                      ? "border-primary/60 bg-primary/10"
-                      : "border-border/80 bg-surface-3 hover:border-border hover:bg-surface-2"
-                  }`}
-                  disabled={executionRoleSaving}
-                  onClick={() => setExecutionRoleDraft(option.id)}
+                  className="underline underline-offset-2"
+                  onClick={() => {
+                    void runPermissionsSave(permissionsDraftValue);
+                  }}
                 >
-                  <div className="font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-foreground">
-                    {option.title}
-                  </div>
-                  <div className="mt-1 text-[11px] text-muted-foreground">{option.description}</div>
+                  Retry
                 </button>
-              );
-            })}
+              </span>
+            ) : null}
           </div>
-          {executionRoleError ? (
+          {permissionsSaveState === "error" && !permissionsSaveError ? (
             <div className="mt-3 rounded-md border border-destructive bg-destructive px-3 py-2 text-xs text-destructive-foreground">
-              {executionRoleError}
+              Couldn't save permissions.
             </div>
           ) : null}
-          <div className="mt-3 flex justify-end">
-            <button
-              className="rounded-md border border-transparent bg-primary px-4 py-2 font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-primary-foreground transition hover:brightness-105 disabled:cursor-not-allowed disabled:border-border disabled:bg-muted disabled:text-muted-foreground"
-              type="button"
-              onClick={() => {
-                void handleUpdateExecutionRole();
-              }}
-              disabled={executionRoleSaving || executionRoleDraft === resolvedExecutionRole}
-            >
-              {executionRoleSaving ? "Saving..." : "Update Role"}
-            </button>
-          </div>
         </section>
 
         <section
-          className="border-t border-border/60 py-4 first:border-t-0"
+          className="sidebar-section"
           data-testid="agent-settings-session"
         >
-          <div className="font-mono text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-            Session
-          </div>
-          <div className="mt-3 text-[11px] text-muted-foreground">
+          <h3 className="sidebar-section-title">Session</h3>
+          <div className="sidebar-copy mt-3 text-[11px] text-muted-foreground/72">
             Starts a new session and clears the visible transcript in Studio.
           </div>
           <button
-            className="mt-3 w-full rounded-md border border-border/80 bg-surface-3 px-3 py-2 font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-foreground transition hover:border-border hover:bg-surface-2 disabled:cursor-not-allowed disabled:opacity-70"
+            className="sidebar-btn-ghost mt-3 min-h-10 w-full px-3 py-2.5 font-mono text-[10px] font-semibold tracking-[0.06em] disabled:cursor-not-allowed disabled:opacity-70"
             type="button"
             onClick={() => {
               void handleNewSession();
@@ -585,16 +672,14 @@ export const AgentSettingsPanel = ({
         </section>
 
         <section
-          className="border-t border-border/60 py-4 first:border-t-0"
+          className="sidebar-section"
           data-testid="agent-settings-cron"
         >
           <div className="flex items-center justify-between gap-2">
-            <div className="font-mono text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-              Cron jobs
-            </div>
+            <h3 className="sidebar-section-title">Cron jobs</h3>
             {!cronLoading && !cronError && cronJobs.length > 0 ? (
               <button
-                className="rounded-md border border-border/80 bg-surface-3 px-2.5 py-1.5 font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-foreground transition hover:border-border hover:bg-surface-2 disabled:cursor-not-allowed disabled:opacity-60"
+                className="sidebar-btn-ghost px-2.5 py-1.5 font-mono text-[10px] font-semibold tracking-[0.06em] disabled:cursor-not-allowed disabled:opacity-60"
                 type="button"
                 onClick={openCronCreate}
               >
@@ -611,21 +696,26 @@ export const AgentSettingsPanel = ({
             </div>
           ) : null}
           {!cronLoading && !cronError && cronJobs.length === 0 ? (
-            <>
-              <div className="mt-3 text-[11px] text-muted-foreground">
+            <div className="sidebar-card mt-3 flex flex-col items-center justify-center gap-4 px-5 py-6 text-center">
+              <CalendarDays
+                className="h-4 w-4 text-muted-foreground/70"
+                aria-hidden="true"
+                data-testid="cron-empty-icon"
+              />
+              <div className="sidebar-copy text-[11px] text-muted-foreground/82">
                 No cron jobs for this agent.
               </div>
               <button
-                className="mt-3 w-full rounded-md border border-border/80 bg-surface-3 px-3 py-2 font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-foreground transition hover:border-border hover:bg-surface-2 disabled:cursor-not-allowed disabled:opacity-60"
+                className="sidebar-btn-primary mt-2 w-auto min-w-[116px] self-center px-4 py-2 font-mono text-[10px] font-semibold tracking-[0.06em] disabled:cursor-not-allowed disabled:opacity-60"
                 type="button"
                 onClick={openCronCreate}
               >
                 Create
               </button>
-            </>
+            </div>
           ) : null}
           {!cronLoading && !cronError && cronJobs.length > 0 ? (
-            <div className="mt-3 flex flex-col gap-2">
+          <div className="mt-3 flex flex-col gap-3">
               {cronJobs.map((job) => {
                 const runBusy = cronRunBusyJobId === job.id;
                 const deleteBusy = cronDeleteBusyJobId === job.id;
@@ -638,17 +728,14 @@ export const AgentSettingsPanel = ({
                 const expanded = expandedCronJobIds.has(job.id);
                 const stateLine = formatCronStateLine(job);
                 return (
-                  <div
-                    key={job.id}
-                    className="group/cron flex items-start justify-between gap-2 rounded-md border border-border/80 bg-surface-2 px-3 py-2"
-                  >
+                  <div key={job.id} className="group/cron ui-card flex items-start justify-between gap-2 px-4 py-3">
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                         <div className="min-w-0 flex-1 truncate font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-foreground">
                           {job.name}
                         </div>
                         {!job.enabled ? (
-                          <div className="shrink-0 rounded-full border border-border/80 bg-muted/40 px-2 py-0.5 font-mono text-[9px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                          <div className="shrink-0 rounded-md bg-muted/50 px-2 py-0.5 font-mono text-[9px] font-semibold uppercase tracking-[0.12em] text-muted-foreground shadow-2xs">
                             Disabled
                           </div>
                         ) : null}
@@ -672,7 +759,7 @@ export const AgentSettingsPanel = ({
                             </span>
                             {payloadExpandable ? (
                               <button
-                                className="shrink-0 rounded-md border border-border/80 bg-surface-3 px-2 py-0.5 font-mono text-[9px] font-semibold uppercase tracking-[0.12em] text-muted-foreground transition hover:border-border hover:bg-surface-2"
+                                className="ui-btn-secondary shrink-0 min-h-0 px-2 py-0.5 font-mono text-[9px] font-semibold tracking-[0.06em] text-muted-foreground"
                                 type="button"
                                 onClick={() => {
                                   setExpandedCronJobIds((prev) => {
@@ -698,7 +785,7 @@ export const AgentSettingsPanel = ({
                     </div>
                     <div className="flex items-center gap-1 opacity-0 transition group-focus-within/cron:opacity-100 group-hover/cron:opacity-100">
                       <button
-                        className="flex h-7 w-7 items-center justify-center rounded-md border border-border/80 bg-surface-3 text-muted-foreground transition hover:border-border hover:bg-surface-2 disabled:cursor-not-allowed disabled:opacity-60"
+                        className="ui-btn-icon h-7 w-7 disabled:cursor-not-allowed disabled:opacity-60"
                         type="button"
                         aria-label={`Run cron job ${job.name} now`}
                         onClick={() => {
@@ -709,7 +796,7 @@ export const AgentSettingsPanel = ({
                         <Play className="h-3.5 w-3.5" />
                       </button>
                       <button
-                        className="flex h-7 w-7 items-center justify-center rounded-md border border-destructive/40 bg-transparent text-destructive transition hover:bg-destructive/10 disabled:cursor-not-allowed disabled:opacity-60"
+                        className="ui-btn-icon h-7 w-7 bg-transparent text-destructive hover:bg-destructive/10 disabled:cursor-not-allowed disabled:opacity-60"
                         type="button"
                         aria-label={`Delete cron job ${job.name}`}
                         onClick={() => {
@@ -728,12 +815,10 @@ export const AgentSettingsPanel = ({
         </section>
 
         <section
-          className="border-t border-border/60 py-4 first:border-t-0"
+          className="sidebar-section"
           data-testid="agent-settings-heartbeat"
         >
-          <div className="font-mono text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-            Heartbeats
-          </div>
+          <h3 className="sidebar-section-title">Heartbeats</h3>
           {heartbeatLoading ? (
             <div className="mt-3 text-[11px] text-muted-foreground">Loading heartbeats...</div>
           ) : null}
@@ -748,7 +833,7 @@ export const AgentSettingsPanel = ({
             </div>
           ) : null}
           {!heartbeatLoading && !heartbeatError && heartbeats.length > 0 ? (
-            <div className="mt-3 flex flex-col gap-2">
+            <div className="mt-3 flex flex-col gap-3">
               {heartbeats.map((heartbeat) => {
                 const runBusy = heartbeatRunBusyId === heartbeat.id;
                 const deleteBusy = heartbeatDeleteBusyId === heartbeat.id;
@@ -757,7 +842,7 @@ export const AgentSettingsPanel = ({
                 return (
                   <div
                     key={heartbeat.id}
-                    className="group/heartbeat flex items-start justify-between gap-2 rounded-md border border-border/80 bg-surface-2 px-3 py-2"
+                    className="group/heartbeat ui-card flex items-start justify-between gap-2 px-4 py-3"
                   >
                     <div className="min-w-0 flex-1">
                       <div className="truncate font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-foreground">
@@ -775,7 +860,7 @@ export const AgentSettingsPanel = ({
                     </div>
                     <div className="flex items-center gap-1 opacity-0 transition group-focus-within/heartbeat:opacity-100 group-hover/heartbeat:opacity-100">
                       <button
-                        className="flex h-7 w-7 items-center justify-center rounded-md border border-border/80 bg-surface-3 text-muted-foreground transition hover:border-border hover:bg-surface-2 disabled:cursor-not-allowed disabled:opacity-60"
+                        className="ui-btn-icon h-7 w-7 disabled:cursor-not-allowed disabled:opacity-60"
                         type="button"
                         aria-label={`Run heartbeat for ${heartbeat.agentId} now`}
                         onClick={() => {
@@ -786,7 +871,7 @@ export const AgentSettingsPanel = ({
                         <Play className="h-3.5 w-3.5" />
                       </button>
                       <button
-                        className="flex h-7 w-7 items-center justify-center rounded-md border border-destructive/40 bg-transparent text-destructive transition hover:bg-destructive/10 disabled:cursor-not-allowed disabled:opacity-60"
+                        className="ui-btn-icon h-7 w-7 bg-transparent text-destructive hover:bg-destructive/10 disabled:cursor-not-allowed disabled:opacity-60"
                         type="button"
                         aria-label={`Delete heartbeat for ${heartbeat.agentId}`}
                         onClick={() => {
@@ -805,46 +890,52 @@ export const AgentSettingsPanel = ({
         </section>
 
         <section
-          className="border-t border-border/60 py-4 first:border-t-0"
+          className="sidebar-section"
           data-testid="agent-settings-display"
         >
-          <div className="font-mono text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-            Display
-          </div>
-          <div className="mt-3 grid gap-3 md:grid-cols-2">
-            <label className="flex items-center justify-between gap-3 rounded-md border border-border/80 bg-surface-3 px-3 py-2 font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-              <span>Show tool calls</span>
-              <input
+          <h3 className="sidebar-section-title">Display</h3>
+          <div className="mt-3 grid gap-6 md:grid-cols-2">
+            <div className="flex min-h-[68px] items-center justify-between gap-6 rounded-md bg-surface-2/55 px-4 py-3">
+              <div className="sidebar-copy flex flex-col">
+                <span className="text-[11px] font-medium text-foreground/88">Show tool calls</span>
+              </div>
+              <button
+                type="button"
+                role="switch"
                 aria-label="Show tool calls"
-                type="checkbox"
-                className="h-4 w-4 rounded border-input text-foreground"
-                checked={agent.toolCallingEnabled}
-                onChange={(event) => onToolCallingToggle(event.target.checked)}
-              />
-            </label>
-            <label className="flex items-center justify-between gap-3 rounded-md border border-border/80 bg-surface-3 px-3 py-2 font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-              <span>Show thinking</span>
-              <input
+                aria-checked={agent.toolCallingEnabled}
+                className={`ui-switch shrink-0 self-center ${agent.toolCallingEnabled ? "ui-switch--on" : ""}`}
+                onClick={() => onToolCallingToggle(!agent.toolCallingEnabled)}
+              >
+                <span className="ui-switch-thumb" />
+              </button>
+            </div>
+            <div className="flex min-h-[68px] items-center justify-between gap-6 rounded-md bg-surface-2/55 px-4 py-3">
+              <div className="sidebar-copy flex flex-col">
+                <span className="text-[11px] font-medium text-foreground/88">Show thinking</span>
+              </div>
+              <button
+                type="button"
+                role="switch"
                 aria-label="Show thinking"
-                type="checkbox"
-                className="h-4 w-4 rounded border-input text-foreground"
-                checked={agent.showThinkingTraces}
-                onChange={(event) => onThinkingTracesToggle(event.target.checked)}
-              />
-            </label>
+                aria-checked={agent.showThinkingTraces}
+                className={`ui-switch shrink-0 self-center ${agent.showThinkingTraces ? "ui-switch--on" : ""}`}
+                onClick={() => onThinkingTracesToggle(!agent.showThinkingTraces)}
+              >
+                <span className="ui-switch-thumb" />
+              </button>
+            </div>
           </div>
         </section>
 
         {canDelete ? (
-          <section className="border-t border-destructive/35 py-4 first:border-t-0">
-            <div className="font-mono text-[10px] font-semibold uppercase tracking-[0.16em] text-destructive">
-              Delete agent
-            </div>
-            <div className="mt-3 text-[11px] text-muted-foreground">
+          <section className="sidebar-section mt-8">
+            <h3 className="sidebar-section-title text-destructive">Delete agent</h3>
+            <div className="mt-3 text-[11px] text-muted-foreground/68">
               Removes the agent from the gateway config and deletes its cron jobs.
             </div>
             <button
-              className="mt-3 w-full rounded-md border border-destructive/50 bg-transparent px-3 py-2 font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-destructive transition hover:bg-destructive/10"
+              className="sidebar-btn-ghost mt-3 w-full px-3 py-2 font-mono text-[10px] font-semibold tracking-[0.06em] text-destructive hover:bg-destructive/10"
               type="button"
               onClick={onDelete}
             >
@@ -852,10 +943,8 @@ export const AgentSettingsPanel = ({
             </button>
           </section>
         ) : (
-          <section className="border-t border-border/60 py-4 first:border-t-0">
-            <div className="font-mono text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-              System agent
-            </div>
+          <section className="sidebar-section mt-8">
+            <h3 className="sidebar-section-title">System agent</h3>
             <div className="mt-3 text-[11px] text-muted-foreground">
               The main agent is reserved and cannot be deleted.
             </div>
@@ -871,25 +960,25 @@ export const AgentSettingsPanel = ({
           onClick={closeCronCreate}
         >
           <div
-            className="w-full max-w-2xl rounded-xl border border-border bg-card"
+            className="ui-panel w-full max-w-2xl bg-card shadow-xs"
             onClick={(event) => event.stopPropagation()}
           >
-            <div className="flex items-start justify-between gap-3 border-b border-border/80 px-4 py-3">
+            <div className="flex items-start justify-between gap-3 px-6 py-5">
               <div className="min-w-0">
-                <div className="font-mono text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                <div className="text-[11px] font-medium tracking-[0.01em] text-muted-foreground/80">
                   Cron job composer
                 </div>
                 <div className="mt-1 text-base font-semibold text-foreground">Create cron job</div>
               </div>
               <button
                 type="button"
-                className="inline-flex h-9 items-center justify-center rounded-md border border-border/80 bg-surface-3 px-3 font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground transition hover:border-border hover:bg-surface-2"
+                className="sidebar-btn-ghost px-3 font-mono text-[10px] font-semibold tracking-[0.06em]"
                 onClick={closeCronCreate}
               >
                 Close
               </button>
             </div>
-            <div className="space-y-4 px-4 py-4">
+            <div className="space-y-4 px-5 py-5">
               {cronCreateError ? (
                 <div className="rounded-md border border-destructive bg-destructive px-3 py-2 text-xs text-destructive-foreground">
                   {cronCreateError}
@@ -909,10 +998,10 @@ export const AgentSettingsPanel = ({
                           key={option.id}
                           type="button"
                           aria-label={option.title}
-                          className={`rounded-md border px-3 py-3 text-left transition ${
+                          className={`ui-card px-3 py-3 text-left transition ${
                             active
-                              ? `${option.accent} border-border`
-                              : "border-border/80 bg-surface-2 hover:border-border hover:bg-surface-3"
+                              ? "ui-selected bg-primary/8"
+                              : "bg-surface-2/60 hover:bg-surface-3/90"
                           }`}
                           onClick={() => selectCronTemplate(option.id)}
                         >
@@ -1058,7 +1147,7 @@ export const AgentSettingsPanel = ({
               {cronCreateStep === 3 ? (
                 <div className="space-y-3 text-sm text-muted-foreground">
                   <div>Review your cron job configuration before creating it.</div>
-                  <div className="rounded-md border border-border/80 bg-surface-2 px-3 py-2">
+                  <div className="ui-card px-3 py-2">
                     <div className="font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-foreground">
                       {cronDraft.name || "Untitled cron job"}
                     </div>
@@ -1077,12 +1166,12 @@ export const AgentSettingsPanel = ({
                 </div>
               ) : null}
             </div>
-            <div className="flex items-center justify-between gap-2 border-t border-border/80 px-4 py-3">
+            <div className="flex items-center justify-between gap-2 border-t border-border/50 px-5 pb-4 pt-5">
               <div className="text-[11px] text-muted-foreground">Step {cronCreateStep + 1} of 4</div>
               <div className="flex items-center gap-2">
                 <button
                   type="button"
-                  className="rounded-md border border-border/80 bg-surface-3 px-3 py-2 font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground transition hover:border-border hover:bg-surface-2 disabled:cursor-not-allowed disabled:opacity-60"
+                  className="sidebar-btn-ghost px-3 py-2 font-mono text-[10px] font-semibold tracking-[0.06em] disabled:cursor-not-allowed disabled:opacity-60"
                   onClick={moveCronCreateBack}
                   disabled={cronCreateStep === 0 || cronCreateBusy}
                 >
@@ -1091,7 +1180,7 @@ export const AgentSettingsPanel = ({
                 {cronCreateStep < 3 ? (
                   <button
                     type="button"
-                    className="rounded-md border border-border/80 bg-surface-3 px-3 py-2 font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-foreground transition hover:border-border hover:bg-surface-2 disabled:cursor-not-allowed disabled:opacity-60"
+                    className="sidebar-btn-ghost px-3 py-2 font-mono text-[10px] font-semibold tracking-[0.06em] disabled:cursor-not-allowed disabled:opacity-60"
                     onClick={moveCronCreateNext}
                     disabled={
                       cronCreateBusy ||
@@ -1104,7 +1193,7 @@ export const AgentSettingsPanel = ({
                 ) : null}
                 <button
                   type="button"
-                  className="rounded-md border border-transparent bg-primary px-3 py-2 font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-primary-foreground transition hover:brightness-105 disabled:cursor-not-allowed disabled:border-border disabled:bg-muted disabled:text-muted-foreground"
+                  className="sidebar-btn-primary px-3 py-2 font-mono text-[10px] font-semibold tracking-[0.06em] disabled:cursor-not-allowed disabled:border-border disabled:bg-muted disabled:text-muted-foreground"
                   onClick={() => {
                     void submitCronCreate();
                   }}
@@ -1346,7 +1435,7 @@ export const AgentBrainPanel = ({
       <div className="flex min-h-0 flex-1 flex-col p-4">
         <section className="flex min-h-0 flex-1 flex-col" data-testid="agent-brain-files">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <div className="font-mono text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+            <div className="font-mono text-[10px] font-semibold tracking-[0.06em] text-muted-foreground">
               {AGENT_FILE_META[agentFileTab].hint}
             </div>
           </div>
@@ -1356,19 +1445,17 @@ export const AgentBrainPanel = ({
             </div>
           ) : null}
 
-          <div className="mt-4 flex flex-wrap items-end gap-2">
+          <div className="ui-segment mt-4 grid grid-cols-3 sm:grid-cols-4">
             {AGENT_FILE_NAMES.map((name) => {
               const active = name === agentFileTab;
-              const label = AGENT_FILE_META[name].title.replace(".md", "");
+              const rawLabel = AGENT_FILE_META[name].title.replace(".md", "").toLowerCase();
+              const label = `${rawLabel.charAt(0).toUpperCase()}${rawLabel.slice(1)}`;
               return (
                 <button
                   key={name}
                   type="button"
-                  className={`rounded-full border px-3 py-1.5 font-mono text-[10px] font-semibold uppercase tracking-[0.12em] transition ${
-                    active
-                      ? "border-border bg-background text-foreground shadow-sm"
-                      : "border-transparent bg-muted/60 text-muted-foreground hover:border-border/80 hover:bg-muted"
-                  }`}
+                  className="ui-segment-item px-3 py-1 font-mono text-[10px] font-semibold tracking-[0.06em]"
+                  data-active={active ? "true" : "false"}
                   onClick={() => {
                     void handleTabChange(name);
                   }}
@@ -1382,7 +1469,7 @@ export const AgentBrainPanel = ({
           <div className="mt-3 flex items-center justify-end gap-1">
             <button
               type="button"
-              className="rounded-md border border-border/70 bg-surface-3 px-2.5 py-1 font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground transition hover:bg-surface-2 disabled:opacity-50"
+              className="ui-btn-secondary px-2.5 py-1 font-mono text-[10px] font-semibold tracking-[0.06em] text-muted-foreground disabled:opacity-50"
               disabled={agentFilesLoading || agentFilesSaving || agentFilesDirty}
               onClick={() => {
                 void reloadAgentFiles();
@@ -1393,31 +1480,25 @@ export const AgentBrainPanel = ({
             </button>
             <button
               type="button"
-              className={`rounded-md border px-2.5 py-1 font-mono text-[10px] font-semibold uppercase tracking-[0.12em] transition ${
-                previewMode
-                  ? "border-border bg-background text-foreground"
-                  : "border-border/70 bg-card/60 text-muted-foreground hover:bg-muted/70"
-              }`}
+              className="ui-segment-item px-2.5 py-1 font-mono text-[10px] font-semibold tracking-[0.06em]"
+              data-active={previewMode ? "true" : "false"}
               onClick={() => setPreviewMode(true)}
             >
               Preview
             </button>
             <button
               type="button"
-              className={`rounded-md border px-2.5 py-1 font-mono text-[10px] font-semibold uppercase tracking-[0.12em] transition ${
-                previewMode
-                  ? "border-border/70 bg-card/60 text-muted-foreground hover:bg-muted/70"
-                  : "border-border bg-background text-foreground"
-              }`}
+              className="ui-segment-item px-2.5 py-1 font-mono text-[10px] font-semibold tracking-[0.06em]"
+              data-active={previewMode ? "false" : "true"}
               onClick={() => setPreviewMode(false)}
             >
               Edit
             </button>
           </div>
 
-          <div className="mt-3 min-h-0 flex-1 rounded-md bg-muted/30 p-2">
+          <div className="mt-3 min-h-0 flex-1 rounded-lg bg-muted/30 p-3">
             {previewMode ? (
-              <div className="agent-markdown h-full overflow-y-auto rounded-md border border-border/80 bg-background/80 px-3 py-2 text-xs text-foreground">
+              <div className="agent-markdown h-full overflow-y-auto rounded-lg bg-background/80 px-4 py-3 text-xs leading-7 text-foreground shadow-2xs">
                 {agentFiles[agentFileTab].content.trim().length === 0 ? (
                   <p className="text-muted-foreground">
                     {AGENT_FILE_PLACEHOLDERS[agentFileTab]}
@@ -1430,7 +1511,7 @@ export const AgentBrainPanel = ({
               </div>
             ) : (
               <textarea
-                className="h-full min-h-0 w-full resize-none overflow-y-auto rounded-md border border-border/80 bg-background/80 px-3 py-2 font-mono text-xs text-foreground outline-none"
+                className="h-full min-h-0 w-full resize-none overflow-y-auto rounded-lg border border-border/80 bg-background/80 px-4 py-3 font-mono text-xs leading-7 text-foreground outline-none"
                 value={agentFiles[agentFileTab].content}
                 placeholder={
                   agentFiles[agentFileTab].content.trim().length === 0

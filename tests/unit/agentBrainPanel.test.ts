@@ -112,11 +112,11 @@ describe("AgentBrainPanel", () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: "AGENTS" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Agents" })).toBeInTheDocument();
     });
 
     expect(screen.getByText("alpha agents")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "IDENTITY" }));
+    fireEvent.click(screen.getByRole("button", { name: "Identity" }));
     await waitFor(() => {
       expect(screen.getByText("Name: Alpha")).toBeInTheDocument();
     });
@@ -155,9 +155,9 @@ describe("AgentBrainPanel", () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: "IDENTITY" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Identity" })).toBeInTheDocument();
     });
-    fireEvent.click(screen.getByRole("button", { name: "IDENTITY" }));
+    fireEvent.click(screen.getByRole("button", { name: "Identity" }));
     fireEvent.click(screen.getByRole("button", { name: "Edit" }));
     const textarea = await screen.findByRole("textbox");
     fireEvent.change(textarea, {

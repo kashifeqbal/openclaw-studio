@@ -47,10 +47,11 @@ Agent creation is now create-only:
 - `src/lib/gateway/agentConfig.ts` (`createGatewayAgent`) performs `config.get` + `agents.create`.
 
 Authority/permission changes happen after creation from settings:
-- `src/features/agents/operations/executionRoleUpdateOperation.ts` (`updateExecutionRoleViaStudio`)
+- `src/features/agents/operations/agentPermissionsOperation.ts` (`updateAgentPermissionsViaStudio`)
   - updates per-agent exec approvals (`exec.approvals.get` + `exec.approvals.set`)
-  - updates runtime tool overrides (`config.get` + `config.patch` via `updateGatewayAgentOverrides`)
+  - updates tool-group overrides for runtime, web, and file access (`config.get` + `config.patch` via `updateGatewayAgentOverrides`)
   - updates session exec behavior (`sessions.patch` via `syncGatewaySessionSettings`)
+- `src/features/agents/operations/executionRoleUpdateOperation.ts` remains for execution-role-only updates and bootstrap paths.
 
 ### Runtime Tool Groups Used By Post-Create Role Updates
 
@@ -311,15 +312,20 @@ Studio wiring for UX:
 
 Studio can also change permissions after an agent exists.
 
-### Execution Role Updates (Conservative/Collaborative/Autonomous)
+### Settings Permissions Updates (Preset + Advanced)
 
-Studio’s “execution role” update flow applies three coordinated changes:
+Studio’s Settings sidebar permissions flow applies coordinated changes from one save action:
 - Exec approvals policy (per-agent, persisted in exec approvals file)
-- Tool allow/deny for runtime tools (`group:runtime`) in agent config
+- Tool allow/deny for runtime/web/fs groups (`group:runtime`, `group:web`, `group:fs`) in agent config
 - Session exec settings (`execHost|execSecurity|execAsk`) via `sessions.patch`
 
 Code:
-- `src/features/agents/operations/executionRoleUpdateOperation.ts` (`updateExecutionRoleViaStudio`)
+- `src/features/agents/operations/agentPermissionsOperation.ts` (`updateAgentPermissionsViaStudio`)
+
+UI model:
+- Presets: `Conservative`, `Collaborative`, `Autonomous`
+- Advanced controls: `Command mode` (`Off`/`Ask`/`Auto`), `Web access` (`Off`/`On`), `File tools` (`Off`/`On`)
+- Create modal remains permission-free; permissions are configured only after creation in Settings.
 
 Why it matters:
 - You can have exec approvals configured but still be unable to run commands if `group:runtime` is denied.

@@ -78,14 +78,14 @@ export const GatewayConnectScreen = ({
   };
 
   const commandField = (
-    <div className="space-y-1.5">
-      <div className="flex items-center gap-2 rounded-md border border-zinc-700/70 bg-zinc-900/95 px-3 py-2">
+      <div className="space-y-1.5">
+        <div className="flex items-center gap-2 rounded-md border border-zinc-700/70 bg-zinc-900/95 px-3 py-2">
         <code className="min-w-0 flex-1 overflow-x-auto whitespace-nowrap font-mono text-[12px] text-zinc-100">
           {localGatewayCommand}
         </code>
         <button
           type="button"
-          className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded border border-zinc-600/80 bg-zinc-800 text-zinc-100 transition hover:bg-zinc-700"
+          className="ui-btn-icon h-7 w-7 shrink-0 border-zinc-600/80 bg-zinc-800 text-zinc-100 hover:bg-zinc-700"
           onClick={copyLocalCommand}
           aria-label="Copy local gateway command"
           title="Copy command"
@@ -110,7 +110,7 @@ export const GatewayConnectScreen = ({
       <label className="flex flex-col gap-1 text-[11px] font-medium text-foreground/80">
         Upstream URL
         <input
-          className="h-10 rounded-md border border-input/70 bg-background/75 px-4 font-sans text-sm text-foreground outline-none transition hover:border-input focus:border-primary/70 focus-visible:ring-2 focus-visible:ring-primary/25"
+          className="ui-input h-10 rounded-md px-4 font-sans text-sm text-foreground outline-none"
           type="text"
           value={gatewayUrl}
           onChange={(event) => onGatewayUrlChange(event.target.value)}
@@ -128,10 +128,10 @@ export const GatewayConnectScreen = ({
       </div>
 
       <label className="flex flex-col gap-1 text-[11px] font-medium text-foreground/80">
-        Upstream Token
+        Upstream token
         <div className="relative">
           <input
-            className="h-10 w-full rounded-md border border-input/70 bg-background/75 px-4 pr-10 font-sans text-sm text-foreground outline-none transition hover:border-input focus:border-primary/70 focus-visible:ring-2 focus-visible:ring-primary/25"
+            className="ui-input h-10 w-full rounded-md px-4 pr-10 font-sans text-sm text-foreground outline-none"
             type={showToken ? "text" : "password"}
             value={token}
             onChange={(event) => onTokenChange(event.target.value)}
@@ -140,7 +140,7 @@ export const GatewayConnectScreen = ({
           />
           <button
             type="button"
-            className="absolute inset-y-0 right-1 my-auto inline-flex h-8 w-8 items-center justify-center rounded text-muted-foreground transition-all hover:text-foreground"
+            className="ui-btn-icon absolute inset-y-0 right-1 my-auto h-8 w-8 border-transparent bg-transparent text-muted-foreground hover:bg-transparent hover:text-foreground"
             aria-label={showToken ? "Hide token" : "Show token"}
             onClick={() => setShowToken((prev) => !prev)}
           >
@@ -156,7 +156,7 @@ export const GatewayConnectScreen = ({
 
       <button
         type="button"
-        className="mt-1 h-11 w-full rounded-md bg-primary px-4 text-xs font-semibold uppercase tracking-[0.1em] text-primary-foreground transition hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-60"
+        className="ui-btn-primary mt-1 h-11 w-full px-4 text-xs font-semibold tracking-[0.05em] disabled:cursor-not-allowed disabled:opacity-60"
         onClick={onConnect}
         disabled={connectDisabled || !gatewayUrl.trim()}
       >
@@ -175,7 +175,7 @@ export const GatewayConnectScreen = ({
 
   return (
     <div className="mx-auto flex min-h-0 w-full max-w-[820px] flex-1 flex-col gap-5">
-      <div className="rounded-sm border border-border/70 bg-muted/90 px-4 py-2">
+      <div className="ui-card px-4 py-2">
         <div className="flex items-center gap-2">
           {status === "connecting" ? (
             <Loader2 className="h-4 w-4 animate-spin text-primary" />
@@ -190,10 +190,10 @@ export const GatewayConnectScreen = ({
 
       {hidePaths ? null : isLocal ? (
         <>
-          <div className="rounded-lg border border-border/45 bg-card/65 px-4 py-4 sm:px-6 sm:py-5">
+          <div className="ui-card px-4 py-4 sm:px-6 sm:py-5">
             <div className="space-y-1.5">
-              <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-                Local Gateway
+              <p className="font-mono text-[10px] font-semibold tracking-[0.06em] text-muted-foreground">
+                Local gateway
               </p>
               <p className="text-sm text-foreground/85">
                 Run locally, or connect to a remote gateway.
@@ -202,7 +202,7 @@ export const GatewayConnectScreen = ({
             {commandField}
             <button
               type="button"
-              className="h-11 w-full rounded-md bg-primary px-4 text-xs font-semibold uppercase tracking-[0.1em] text-primary-foreground transition hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-60"
+              className="ui-btn-primary h-11 w-full px-4 text-xs font-semibold tracking-[0.05em] disabled:cursor-not-allowed disabled:opacity-60"
               onClick={onConnect}
               disabled={connectDisabled}
             >
@@ -217,13 +217,13 @@ export const GatewayConnectScreen = ({
             {error ? <p className="text-xs leading-snug text-destructive">{error}</p> : null}
           </div>
 
-          <div className="rounded-lg border border-border/40 bg-card/60 px-4 py-3.5 sm:px-6 sm:py-4">
+          <div className="ui-card px-4 py-3.5 sm:px-6 sm:py-4">
             <button
               type="button"
-              className="flex h-9 w-full items-center justify-between rounded-md border border-input/55 bg-background/65 px-3 py-2 text-left font-mono text-[10px] font-medium uppercase tracking-[0.1em] text-muted-foreground transition hover:border-input/75 hover:bg-muted/40"
+              className="ui-btn-secondary flex h-9 w-full items-center justify-between px-3 py-2 text-left font-mono text-[10px] font-medium tracking-[0.06em] text-muted-foreground"
               onClick={() => setRemoteExpanded((prev) => !prev)}
             >
-              Remote Gateway
+              Remote gateway
               {remoteExpanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
             </button>
             {remoteExpanded ? remoteForm : null}
@@ -231,20 +231,20 @@ export const GatewayConnectScreen = ({
         </>
       ) : (
         <>
-          <div className="rounded-lg border border-border/45 bg-card/65 px-4 py-5 sm:px-6">
+          <div className="ui-card px-4 py-5 sm:px-6">
             <div>
-              <p className="font-mono text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
-                Remote Gateway
+              <p className="font-mono text-[10px] font-medium tracking-[0.06em] text-muted-foreground">
+                Remote gateway
               </p>
               <p className="mt-2 text-sm text-foreground/85">Enter your URL and token to connect.</p>
             </div>
             {remoteForm}
           </div>
 
-          <div className="rounded-lg border border-border/40 bg-card/60 px-4 py-3.5 sm:px-6 sm:py-4">
+          <div className="ui-card px-4 py-3.5 sm:px-6 sm:py-4">
             <button
               type="button"
-              className="flex h-9 w-full items-center justify-between rounded-md border border-input/55 bg-background/65 px-3 py-2 text-left font-mono text-[10px] font-medium uppercase tracking-[0.1em] text-muted-foreground transition hover:border-input/75 hover:bg-muted/40"
+              className="ui-btn-secondary flex h-9 w-full items-center justify-between px-3 py-2 text-left font-mono text-[10px] font-medium tracking-[0.06em] text-muted-foreground"
               onClick={() => setLocalExpanded((prev) => !prev)}
             >
               Run locally
@@ -254,7 +254,7 @@ export const GatewayConnectScreen = ({
               <div className="mt-3 space-y-3">
                 {commandField}
                 {localGatewayDefaults ? (
-                  <div className="rounded-md border border-input/60 bg-background/50 px-3 py-3">
+                  <div className="ui-input rounded-md px-3 py-3">
                     <div className="space-y-2">
                       <p className="text-xs text-muted-foreground">
                         Use token from <span className="font-mono">~/.openclaw/openclaw.json</span>.
@@ -264,7 +264,7 @@ export const GatewayConnectScreen = ({
                       </p>
                       <button
                         type="button"
-                        className="h-9 w-full rounded-md border border-input/70 bg-background/75 px-3 text-xs font-semibold uppercase tracking-[0.08em] text-foreground transition hover:border-input"
+                        className="ui-btn-secondary h-9 w-full px-3 text-xs font-semibold tracking-[0.05em] text-foreground"
                         onClick={onUseLocalDefaults}
                       >
                         Use local defaults

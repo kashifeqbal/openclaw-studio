@@ -106,6 +106,30 @@ describe("AgentSettingsPanel", () => {
     });
   });
 
+  it("renders_icon_close_button_with_accessible_label", () => {
+    render(
+      createElement(AgentSettingsPanel, {
+        agent: createAgent(),
+        onClose: vi.fn(),
+        onRename: vi.fn(async () => true),
+        onNewSession: vi.fn(),
+        onDelete: vi.fn(),
+        onToolCallingToggle: vi.fn(),
+        onThinkingTracesToggle: vi.fn(),
+        cronJobs: [],
+        cronLoading: false,
+        cronError: null,
+        cronRunBusyJobId: null,
+        cronDeleteBusyJobId: null,
+        onRunCronJob: vi.fn(),
+        onDeleteCronJob: vi.fn(),
+      })
+    );
+
+    expect(screen.getByLabelText("Close panel")).toBeInTheDocument();
+    expect(screen.getByTestId("agent-settings-close")).toBeInTheDocument();
+  });
+
   it("keeps_show_tool_calls_and_show_thinking_toggles", () => {
     render(
       createElement(AgentSettingsPanel, {
@@ -126,8 +150,117 @@ describe("AgentSettingsPanel", () => {
       })
     );
 
-    expect(screen.getByLabelText("Show tool calls")).toBeInTheDocument();
-    expect(screen.getByLabelText("Show thinking")).toBeInTheDocument();
+    const toolCallsSwitch = screen.getByRole("switch", { name: "Show tool calls" });
+    const thinkingSwitch = screen.getByRole("switch", { name: "Show thinking" });
+    expect(toolCallsSwitch).toBeInTheDocument();
+    expect(thinkingSwitch).toBeInTheDocument();
+    expect(toolCallsSwitch).toHaveAttribute("aria-checked", "true");
+    expect(thinkingSwitch).toHaveAttribute("aria-checked", "true");
+  });
+
+  it("renders_permissions_controls", () => {
+    render(
+      createElement(AgentSettingsPanel, {
+        agent: createAgent(),
+        onClose: vi.fn(),
+        onRename: vi.fn(async () => true),
+        onNewSession: vi.fn(),
+        onDelete: vi.fn(),
+        onToolCallingToggle: vi.fn(),
+        onThinkingTracesToggle: vi.fn(),
+        cronJobs: [],
+        cronLoading: false,
+        cronError: null,
+        cronRunBusyJobId: null,
+        cronDeleteBusyJobId: null,
+        onRunCronJob: vi.fn(),
+        onDeleteCronJob: vi.fn(),
+      })
+    );
+
+    expect(screen.getByText("Permissions")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Run commands off" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Run commands ask" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Run commands auto" })).toBeInTheDocument();
+    expect(screen.getByRole("switch", { name: "Web access" })).toHaveAttribute(
+      "aria-checked",
+      "false"
+    );
+    expect(screen.getByRole("switch", { name: "File tools" })).toHaveAttribute(
+      "aria-checked",
+      "false"
+    );
+  });
+
+  it("updates_switch_aria_state_when_toggled", () => {
+    render(
+      createElement(AgentSettingsPanel, {
+        agent: createAgent(),
+        onClose: vi.fn(),
+        onRename: vi.fn(async () => true),
+        onNewSession: vi.fn(),
+        onDelete: vi.fn(),
+        onToolCallingToggle: vi.fn(),
+        onThinkingTracesToggle: vi.fn(),
+        cronJobs: [],
+        cronLoading: false,
+        cronError: null,
+        cronRunBusyJobId: null,
+        cronDeleteBusyJobId: null,
+        onRunCronJob: vi.fn(),
+        onDeleteCronJob: vi.fn(),
+      })
+    );
+
+    const webSwitch = screen.getByRole("switch", { name: "Web access" });
+    fireEvent.click(webSwitch);
+    expect(webSwitch).toHaveAttribute("aria-checked", "true");
+  });
+
+  it("autosaves_updated_permissions_draft", async () => {
+    vi.useFakeTimers();
+    try {
+      const onUpdateAgentPermissions = vi.fn(async () => {});
+      render(
+        createElement(AgentSettingsPanel, {
+          agent: createAgent(),
+          permissionsDraft: {
+            commandMode: "off",
+            webAccess: false,
+            fileTools: false,
+          },
+          onUpdateAgentPermissions,
+          onClose: vi.fn(),
+          onRename: vi.fn(async () => true),
+          onNewSession: vi.fn(),
+          onDelete: vi.fn(),
+          onToolCallingToggle: vi.fn(),
+          onThinkingTracesToggle: vi.fn(),
+          cronJobs: [],
+          cronLoading: false,
+          cronError: null,
+          cronRunBusyJobId: null,
+          cronDeleteBusyJobId: null,
+          onRunCronJob: vi.fn(),
+          onDeleteCronJob: vi.fn(),
+        })
+      );
+
+      fireEvent.click(screen.getByRole("button", { name: "Run commands auto" }));
+      fireEvent.click(screen.getByRole("switch", { name: "Web access" }));
+      fireEvent.click(screen.getByRole("switch", { name: "File tools" }));
+      await vi.advanceTimersByTimeAsync(500);
+
+      await waitFor(() => {
+        expect(onUpdateAgentPermissions).toHaveBeenCalledWith({
+          commandMode: "auto",
+          webAccess: true,
+          fileTools: true,
+        });
+      });
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("does_not_render_runtime_settings_section", () => {
@@ -321,6 +454,7 @@ describe("AgentSettingsPanel", () => {
     );
 
     expect(screen.getByText("No cron jobs for this agent.")).toBeInTheDocument();
+    expect(screen.getByTestId("cron-empty-icon")).toBeInTheDocument();
   });
 
   it("shows_create_button_when_no_cron_jobs", () => {

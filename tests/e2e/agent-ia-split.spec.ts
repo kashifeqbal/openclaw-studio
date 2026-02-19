@@ -26,19 +26,19 @@ test.beforeEach(async ({ page }) => {
   });
 });
 
-test("shows_connection_settings_and_brain_controls_in_header", async ({ page }) => {
+test("shows_connection_settings_control_in_header", async ({ page }) => {
   await page.goto("/");
 
-  await expect(page.getByTestId("brain-files-toggle")).toBeVisible();
+  await expect(page.getByTestId("brain-files-toggle")).toHaveCount(0);
   await page.getByTestId("studio-menu-toggle").click();
   await expect(page.getByTestId("gateway-settings-toggle")).toBeVisible();
 });
 
-test("mobile_header_shows_brain_and_connection_controls", async ({ page }) => {
+test("mobile_header_shows_connection_control", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/");
 
-  await expect(page.getByTestId("brain-files-toggle")).toBeVisible();
+  await expect(page.getByTestId("brain-files-toggle")).toHaveCount(0);
   await page.getByTestId("studio-menu-toggle").click();
   await expect(page.getByTestId("gateway-settings-toggle")).toBeVisible();
 });

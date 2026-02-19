@@ -109,8 +109,12 @@ import {
 import { createSpecialLatestUpdateOperation } from "@/features/agents/operations/specialLatestUpdateOperation";
 import {
   updateExecutionRoleViaStudio,
-  type ExecutionRoleId,
 } from "@/features/agents/operations/executionRoleUpdateOperation";
+import {
+  updateAgentPermissionsViaStudio,
+  resolveAgentPermissionsDraft,
+  type AgentPermissionsDraft,
+} from "@/features/agents/operations/agentPermissionsOperation";
 import {
   resolveSummarySnapshotIntent,
 } from "@/features/agents/operations/fleetLifecycleWorkflow";
@@ -280,6 +284,29 @@ const AgentStudioPage = () => {
     if (!settingsAgentId) return null;
     return agents.find((entry) => entry.agentId === settingsAgentId) ?? null;
   }, [agents, settingsAgentId]);
+  const settingsAgentPermissionsDraft = useMemo(() => {
+    if (!settingsAgent) return null;
+    const baseConfig =
+      gatewayConfigSnapshot?.config &&
+      typeof gatewayConfigSnapshot.config === "object" &&
+      !Array.isArray(gatewayConfigSnapshot.config)
+        ? (gatewayConfigSnapshot.config as Record<string, unknown>)
+        : undefined;
+    const list = readConfigAgentList(baseConfig);
+    const configEntry = list.find((entry) => entry.id === settingsAgent.agentId) ?? null;
+    const toolsRaw =
+      configEntry && typeof (configEntry as Record<string, unknown>).tools === "object"
+        ? ((configEntry as Record<string, unknown>).tools as unknown)
+        : null;
+    const tools =
+      toolsRaw && typeof toolsRaw === "object" && !Array.isArray(toolsRaw)
+        ? (toolsRaw as Record<string, unknown>)
+        : null;
+    return resolveAgentPermissionsDraft({
+      agent: settingsAgent,
+      existingTools: tools,
+    });
+  }, [gatewayConfigSnapshot, settingsAgent]);
   const selectedBrainAgentId = useMemo(() => {
     return focusedAgent?.agentId ?? agents[0]?.agentId ?? null;
   }, [agents, focusedAgent]);
@@ -574,6 +601,20 @@ const AgentStudioPage = () => {
     status,
   ]);
 
+  const refreshGatewayConfigSnapshot = useCallback(async () => {
+    if (status !== "connected") return null;
+    try {
+      const snapshot = await client.call<GatewayModelPolicySnapshot>("config.get", {});
+      setGatewayConfigSnapshot(snapshot);
+      return snapshot;
+    } catch (err) {
+      if (!isGatewayDisconnectLikeError(err)) {
+        console.error("Failed to refresh gateway config.", err);
+      }
+      return null;
+    }
+  }, [client, status]);
+
   const sandboxToolsRepairAttemptedRef = useRef(false);
 
   useEffect(() => {
@@ -783,6 +824,12 @@ const AgentStudioPage = () => {
       setSettingsAgentId(null);
     }
   }, [settingsAgentId, settingsAgent]);
+
+  useEffect(() => {
+    if (!settingsAgentId) return;
+    if (status !== "connected") return;
+    void refreshGatewayConfigSnapshot();
+  }, [refreshGatewayConfigSnapshot, settingsAgentId, status]);
 
   useEffect(() => {
     if (!settingsAgentId || status !== "connected") {
@@ -1085,15 +1132,16 @@ const AgentStudioPage = () => {
     [dispatch, flushPendingDraft, focusedAgent]
   );
 
-  const handleBrainToggle = useCallback(() => {
-    setBrainPanelOpen((prev) => {
-      const next = !prev;
-      if (!next) return false;
+  const handleOpenAgentBrain = useCallback(
+    (agentId: string) => {
+      flushPendingDraft(focusedAgent?.agentId ?? null);
       setSettingsAgentId(null);
+      setBrainPanelOpen(true);
       setMobilePane("brain");
-      return true;
-    });
-  }, []);
+      dispatch({ type: "selectAgent", agentId });
+    },
+    [dispatch, flushPendingDraft, focusedAgent]
+  );
 
   const handleDeleteAgent = useCallback(
     async (agentId: string) => {
@@ -1391,8 +1439,6 @@ const AgentStudioPage = () => {
             focusFilterTouchedRef.current = true;
             setFocusFilter("all");
             dispatch({ type: "selectAgent", agentId: created.id });
-            setSettingsAgentId(null);
-            setMobilePane("chat");
             return { id: created.id };
           },
           setQueuedBlock: ({ agentName, startedAt }) => {
@@ -1414,11 +1460,57 @@ const AgentStudioPage = () => {
               return { ...current, phase: "creating" };
             });
           },
-          onCompletion: async () => {
+          onCompletion: async (completion) => {
             await loadAgents();
+            let createdAgent =
+              stateRef.current.agents.find((entry) => entry.agentId === completion.agentId) ?? null;
+            if (!createdAgent) {
+              await loadAgents();
+              createdAgent =
+                stateRef.current.agents.find((entry) => entry.agentId === completion.agentId) ??
+                null;
+            }
+            if (!createdAgent) {
+              const message = `Agent "${completion.agentName}" was created, but Studio could not load it yet.`;
+              setCreateAgentModalError(message);
+              setError(message);
+              setCreateAgentBlock(null);
+              setCreateAgentModalOpen(false);
+              return;
+            }
+
+            let bootstrapError: string | null = null;
+            if (
+              createdAgent.sessionExecSecurity !== "full" ||
+              createdAgent.sessionExecAsk !== "off"
+            ) {
+              try {
+                await updateExecutionRoleViaStudio({
+                  client,
+                  agentId: createdAgent.agentId,
+                  sessionKey: createdAgent.sessionKey,
+                  role: "autonomous",
+                  loadAgents: async () => {},
+                });
+                await loadAgents();
+                await refreshGatewayConfigSnapshot();
+              } catch (err) {
+                bootstrapError =
+                  err instanceof Error ? err.message : "Failed to apply autonomous defaults.";
+                setError(
+                  `Agent created, but autonomous defaults could not be applied: ${bootstrapError}`
+                );
+              }
+            }
+
+            handleOpenAgentSettings(completion.agentId);
+            if (bootstrapError) {
+              setCreateAgentModalError(`Autonomous defaults failed: ${bootstrapError}`);
+            } else {
+              setCreateAgentModalError(null);
+            }
             setCreateAgentBlock(null);
             setCreateAgentModalOpen(false);
-            setMobilePane("chat");
           },
           setCreateAgentModalError,
           setCreateAgentBusy,
@@ -1438,8 +1530,10 @@ const AgentStudioPage = () => {
       enqueueConfigMutation,
       flushPendingDraft,
       focusedAgent,
+      handleOpenAgentSettings,
       loadAgents,
       persistAvatarSeed,
+      refreshGatewayConfigSnapshot,
       renameAgentBlock,
       setError,
       status,
@@ -2062,8 +2156,8 @@ const AgentStudioPage = () => {
     ]
   );
 
-  const handleUpdateExecutionRole = useCallback(
-    async (agentId: string, role: ExecutionRoleId) => {
+  const handleUpdateAgentPermissions = useCallback(
+    async (agentId: string, draft: AgentPermissionsDraft) => {
       const guard = resolveMutationStartGuard({
         status: "connected",
         hasCreateBlock: Boolean(createAgentBlock),
@@ -2078,16 +2172,20 @@ const AgentStudioPage = () => {
       if (!agent) return;
 
       await enqueueConfigMutation({
-        kind: "update-agent-execution-role",
-        label: `Update execution role for ${agent.name}`,
+        kind: "update-agent-permissions",
+        label: `Update permissions for ${agent.name}`,
         run: async () => {
-          await updateExecutionRoleViaStudio({
+          await updateAgentPermissionsViaStudio({
             client,
             agentId: resolvedAgentId,
             sessionKey: agent.sessionKey,
-            role,
-            loadAgents,
+            draft,
+            loadAgents: async () => {},
           });
+          await loadAgents();
+          await refreshGatewayConfigSnapshot();
+          setSettingsAgentId(resolvedAgentId);
+          setMobilePane("settings");
         },
       });
     },
@@ -2098,6 +2196,7 @@ const AgentStudioPage = () => {
       deleteAgentBlock,
       enqueueConfigMutation,
       loadAgents,
+      refreshGatewayConfigSnapshot,
       renameAgentBlock,
     ]
   );
@@ -2191,7 +2290,7 @@ const AgentStudioPage = () => {
     return (
       <div className="relative min-h-screen w-screen overflow-hidden bg-background">
         <div className="flex min-h-screen items-center justify-center px-6">
-          <div className="glass-panel w-full max-w-md px-6 py-6 text-center">
+          <div className="glass-panel ui-panel w-full max-w-md px-6 py-6 text-center">
             <div className="font-mono text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
               OpenClaw Studio
             </div>
@@ -2212,9 +2311,6 @@ const AgentStudioPage = () => {
             <HeaderBar
               status={status}
               onConnectionSettings={() => setShowConnectionPanel(true)}
-              onBrainFiles={handleBrainToggle}
-              brainFilesOpen={brainPanelOpen}
-              brainDisabled
             />
           </div>
           <GatewayConnectScreen
@@ -2237,7 +2333,7 @@ const AgentStudioPage = () => {
     return (
       <div className="relative min-h-screen w-screen overflow-hidden bg-background">
         <div className="flex min-h-screen items-center justify-center px-6">
-          <div className="glass-panel w-full max-w-md px-6 py-6 text-center">
+          <div className="glass-panel ui-panel w-full max-w-md px-6 py-6 text-center">
             <div className="font-mono text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
               OpenClaw Studio
             </div>
@@ -2252,7 +2348,7 @@ const AgentStudioPage = () => {
     <div className="relative min-h-screen w-screen overflow-hidden bg-background">
       {state.loading ? (
         <div className="pointer-events-none fixed bottom-4 left-0 right-0 z-50 flex justify-center px-3">
-          <div className="glass-panel px-6 py-3 font-mono text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
+          <div className="glass-panel ui-card px-6 py-3 font-mono text-[11px] tracking-[0.08em] text-muted-foreground">
             Loading agents…
           </div>
         </div>
@@ -2262,15 +2358,12 @@ const AgentStudioPage = () => {
           <HeaderBar
             status={status}
             onConnectionSettings={() => setShowConnectionPanel(true)}
-            onBrainFiles={handleBrainToggle}
-            brainFilesOpen={brainPanelOpen}
-            brainDisabled={!hasAnyAgents}
           />
         </div>
 
         {connectionPanelVisible ? (
           <div className="pointer-events-none fixed inset-x-0 top-20 z-[140] flex justify-center px-3 sm:px-4 md:px-5">
-            <div className="glass-panel pointer-events-auto w-full max-w-4xl border border-border/80 !bg-card px-4 py-4 sm:px-6 sm:py-6">
+            <div className="glass-panel pointer-events-auto w-full max-w-4xl !bg-card px-4 py-4 sm:px-6 sm:py-6">
               <ConnectionPanel
                 gatewayUrl={gatewayUrl}
                 token={token}
@@ -2295,44 +2388,35 @@ const AgentStudioPage = () => {
         ) : null}
         {configMutationStatusLine ? (
           <div className="w-full">
-            <div className="rounded-md border border-border/80 bg-surface-2 px-4 py-2 font-mono text-[11px] uppercase tracking-[0.11em] text-muted-foreground">
+            <div className="ui-card px-4 py-2 font-mono text-[11px] tracking-[0.07em] text-muted-foreground">
               {configMutationStatusLine}
             </div>
           </div>
         ) : null}
 
         <div className="flex min-h-0 flex-1 flex-col gap-4 xl:flex-row">
-          <div className="glass-panel bg-surface-1 p-2 xl:hidden" data-testid="mobile-pane-toggle">
-            <div className="grid grid-cols-4 gap-2">
+          <div className="glass-panel ui-panel p-2 xl:hidden" data-testid="mobile-pane-toggle">
+            <div className="ui-segment grid-cols-4">
               <button
                 type="button"
-                className={`rounded-md border px-2 py-2 font-mono text-[10px] font-semibold uppercase tracking-[0.13em] transition ${
-                  mobilePane === "fleet"
-                    ? "border-border bg-surface-2 text-foreground"
-                    : "border-border/80 bg-surface-1 text-muted-foreground hover:border-border hover:bg-surface-2"
-                }`}
+                className="ui-segment-item px-2 py-2 font-mono text-[12px] font-medium tracking-[0.02em]"
+                data-active={mobilePane === "fleet" ? "true" : "false"}
                 onClick={() => setMobilePane("fleet")}
               >
                 Fleet
               </button>
               <button
                 type="button"
-                className={`rounded-md border px-2 py-2 font-mono text-[10px] font-semibold uppercase tracking-[0.13em] transition ${
-                  mobilePane === "chat"
-                    ? "border-border bg-surface-2 text-foreground"
-                    : "border-border/80 bg-surface-1 text-muted-foreground hover:border-border hover:bg-surface-2"
-                }`}
+                className="ui-segment-item px-2 py-2 font-mono text-[12px] font-medium tracking-[0.02em]"
+                data-active={mobilePane === "chat" ? "true" : "false"}
                 onClick={() => setMobilePane("chat")}
               >
                 Chat
               </button>
               <button
                 type="button"
-                className={`rounded-md border px-2 py-2 font-mono text-[10px] font-semibold uppercase tracking-[0.13em] transition ${
-                  mobilePane === "settings"
-                    ? "border-border bg-surface-2 text-foreground"
-                    : "border-border/80 bg-surface-1 text-muted-foreground hover:border-border hover:bg-surface-2"
-                }`}
+                className="ui-segment-item px-2 py-2 font-mono text-[12px] font-medium tracking-[0.02em]"
+                data-active={mobilePane === "settings" ? "true" : "false"}
                 onClick={() => setMobilePane("settings")}
                 disabled={!settingsAgent}
               >
@@ -2340,11 +2424,8 @@ const AgentStudioPage = () => {
               </button>
               <button
                 type="button"
-                className={`rounded-md border px-2 py-2 font-mono text-[10px] font-semibold uppercase tracking-[0.13em] transition ${
-                  mobilePane === "brain"
-                    ? "border-border bg-surface-2 text-foreground"
-                    : "border-border/80 bg-surface-1 text-muted-foreground hover:border-border hover:bg-surface-2"
-                }`}
+                className="ui-segment-item px-2 py-2 font-mono text-[12px] font-medium tracking-[0.02em]"
+                data-active={mobilePane === "brain" ? "true" : "false"}
                 onClick={() => {
                   setBrainPanelOpen(true);
                   setSettingsAgentId(null);
@@ -2377,7 +2458,7 @@ const AgentStudioPage = () => {
             />
           </div>
           <div
-            className={`${mobilePane === "chat" ? "flex" : "hidden"} min-h-0 flex-1 overflow-hidden rounded-md border border-border/80 bg-surface-1 xl:flex`}
+            className={`${mobilePane === "chat" ? "flex" : "hidden"} ui-panel min-h-0 flex-1 overflow-hidden xl:flex`}
             data-testid="focused-agent-panel"
           >
             {focusedAgent ? (
@@ -2392,6 +2473,7 @@ const AgentStudioPage = () => {
                     stopDisabledReason={focusedAgentStopDisabledReason}
                     onLoadMoreHistory={() => loadMoreAgentHistory(focusedAgent.agentId)}
                     onOpenSettings={() => handleOpenAgentSettings(focusedAgent.agentId)}
+                    onOpenBrain={() => handleOpenAgentBrain(focusedAgent.agentId)}
                     onModelChange={(value) =>
                       handleModelChange(focusedAgent.agentId, focusedAgent.sessionKey, value)
                     }
@@ -2428,7 +2510,7 @@ const AgentStudioPage = () => {
           </div>
           {brainPanelOpen ? (
             <div
-              className={`${mobilePane === "brain" ? "block" : "hidden"} glass-panel min-h-0 w-full shrink-0 overflow-hidden p-0 xl:block xl:min-w-[360px] xl:max-w-[430px] xl:border-l xl:border-border/70`}
+              className={`${mobilePane === "brain" ? "block" : "hidden"} sidebar-shell glass-panel ui-panel min-h-0 w-full shrink-0 overflow-hidden p-0 xl:block xl:min-w-[360px] xl:max-w-[430px]`}
             >
               <AgentBrainPanel
                 client={client}
@@ -2443,7 +2525,7 @@ const AgentStudioPage = () => {
           ) : null}
           {settingsAgent ? (
             <div
-              className={`${mobilePane === "settings" ? "block" : "hidden"} glass-panel min-h-0 w-full shrink-0 overflow-hidden p-0 xl:block xl:min-w-[360px] xl:max-w-[430px] xl:border-l xl:border-border/70`}
+              className={`${mobilePane === "settings" ? "block" : "hidden"} sidebar-shell glass-panel ui-panel min-h-0 w-full shrink-0 overflow-hidden p-0 xl:block xl:min-w-[360px] xl:max-w-[430px]`}
             >
               <AgentSettingsPanel
                 key={settingsAgent.agentId}
@@ -2453,8 +2535,9 @@ const AgentStudioPage = () => {
                   setMobilePane("chat");
                 }}
                 onRename={(name) => handleRenameAgent(settingsAgent.agentId, name)}
-                onUpdateExecutionRole={(role) =>
-                  handleUpdateExecutionRole(settingsAgent.agentId, role)
+                permissionsDraft={settingsAgentPermissionsDraft ?? undefined}
+                onUpdateAgentPermissions={(draft) =>
+                  handleUpdateAgentPermissions(settingsAgent.agentId, draft)
                 }
                 onNewSession={() => handleNewSession(settingsAgent.agentId)}
                 onDelete={() => handleDeleteAgent(settingsAgent.agentId)}
@@ -2514,8 +2597,8 @@ const AgentStudioPage = () => {
           aria-modal="true"
           aria-label="Creating agent"
         >
-          <div className="w-full max-w-md rounded-lg border border-border bg-card p-6">
-            <div className="font-mono text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+          <div className="ui-panel w-full max-w-md p-6">
+            <div className="font-mono text-[10px] font-semibold tracking-[0.06em] text-muted-foreground">
               Agent create in progress
             </div>
             <div className="mt-2 text-base font-semibold text-foreground">
@@ -2525,7 +2608,7 @@ const AgentStudioPage = () => {
               Studio is temporarily locked until creation finishes.
             </div>
             {createBlockStatusLine ? (
-              <div className="mt-4 rounded-md border border-border/70 bg-muted/40 px-3 py-2 font-mono text-[11px] uppercase tracking-[0.12em] text-foreground">
+              <div className="ui-card mt-4 px-3 py-2 font-mono text-[11px] tracking-[0.06em] text-foreground">
                 {createBlockStatusLine}
               </div>
             ) : null}
@@ -2540,8 +2623,8 @@ const AgentStudioPage = () => {
           aria-modal="true"
           aria-label="Renaming agent and restarting gateway"
         >
-          <div className="w-full max-w-md rounded-lg border border-border bg-card p-6">
-            <div className="font-mono text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+          <div className="ui-panel w-full max-w-md p-6">
+            <div className="font-mono text-[10px] font-semibold tracking-[0.06em] text-muted-foreground">
               Agent rename in progress
             </div>
             <div className="mt-2 text-base font-semibold text-foreground">
@@ -2551,7 +2634,7 @@ const AgentStudioPage = () => {
               Studio is temporarily locked until the gateway restarts.
             </div>
             {renameBlockStatusLine ? (
-              <div className="mt-4 rounded-md border border-border/70 bg-muted/40 px-3 py-2 font-mono text-[11px] uppercase tracking-[0.12em] text-foreground">
+              <div className="ui-card mt-4 px-3 py-2 font-mono text-[11px] tracking-[0.06em] text-foreground">
                 {renameBlockStatusLine}
               </div>
             ) : null}
@@ -2566,8 +2649,8 @@ const AgentStudioPage = () => {
           aria-modal="true"
           aria-label="Deleting agent and restarting gateway"
         >
-          <div className="w-full max-w-md rounded-lg border border-border bg-card p-6">
-            <div className="font-mono text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+          <div className="ui-panel w-full max-w-md p-6">
+            <div className="font-mono text-[10px] font-semibold tracking-[0.06em] text-muted-foreground">
               Agent delete in progress
             </div>
             <div className="mt-2 text-base font-semibold text-foreground">
@@ -2577,7 +2660,7 @@ const AgentStudioPage = () => {
               Studio is temporarily locked until the gateway restarts.
             </div>
             {deleteBlockStatusLine ? (
-              <div className="mt-4 rounded-md border border-border/70 bg-muted/40 px-3 py-2 font-mono text-[11px] uppercase tracking-[0.12em] text-foreground">
+              <div className="ui-card mt-4 px-3 py-2 font-mono text-[11px] tracking-[0.06em] text-foreground">
                 {deleteBlockStatusLine}
               </div>
             ) : null}

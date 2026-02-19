@@ -12,7 +12,7 @@ import {
 import type { AgentState as AgentRecord } from "@/features/agents/state/store";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { ChevronRight, Clock, Cog, Shuffle } from "lucide-react";
+import { Brain, ChevronRight, Clock, Cog, Shuffle } from "lucide-react";
 import type { GatewayModelChoice } from "@/lib/gateway/models";
 import { rewriteMediaLinesToMarkdown } from "@/lib/text/media-markdown";
 import { normalizeAssistantDisplayText } from "@/lib/text/assistantText";
@@ -94,6 +94,7 @@ type AgentChatPanelProps = {
   stopDisabledReason?: string | null;
   onLoadMoreHistory: () => void;
   onOpenSettings: () => void;
+  onOpenBrain?: () => void;
   onModelChange: (value: string | null) => void;
   onThinkingChange: (value: string | null) => void;
   onDraftChange: (value: string) => void;
@@ -124,13 +125,13 @@ const ExecApprovalCard = memo(function ExecApprovalCard({
   const disabled = approval.resolving || !onResolve;
   return (
     <div
-      className={`w-full ${ASSISTANT_MAX_WIDTH_EXPANDED_CLASS} ${ASSISTANT_GUTTER_CLASS} self-start rounded-[8px] border border-amber-500/35 bg-amber-500/12 px-3 py-2`}
+      className={`w-full ${ASSISTANT_MAX_WIDTH_EXPANDED_CLASS} ${ASSISTANT_GUTTER_CLASS} self-start rounded-md bg-amber-500/12 px-3 py-2 shadow-2xs`}
       data-testid={`exec-approval-card-${approval.id}`}
     >
-      <div className="font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-amber-800">
+      <div className="type-meta text-amber-800">
         Exec approval required
       </div>
-      <div className="mt-2 rounded-[8px] border border-border/70 bg-surface-3 px-2 py-1.5">
+      <div className="mt-2 rounded-md bg-surface-3 px-2 py-1.5 shadow-2xs">
         <div className="font-mono text-[10px] font-semibold text-foreground">{approval.command}</div>
       </div>
       <div className="mt-2 grid gap-1 text-[11px] text-muted-foreground sm:grid-cols-2">
@@ -139,14 +140,14 @@ const ExecApprovalCard = memo(function ExecApprovalCard({
         {approval.cwd ? <div className="sm:col-span-2">CWD: {approval.cwd}</div> : null}
       </div>
       {approval.error ? (
-        <div className="mt-2 rounded-[8px] border border-destructive/40 bg-destructive/12 px-2 py-1 text-[11px] text-destructive">
+        <div className="mt-2 rounded-md bg-destructive/12 px-2 py-1 text-[11px] text-destructive shadow-2xs">
           {approval.error}
         </div>
       ) : null}
       <div className="mt-2 flex flex-wrap gap-2">
         <button
           type="button"
-          className="rounded-[8px] border border-border/70 bg-surface-3 px-2.5 py-1 font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-foreground transition hover:bg-surface-2 disabled:cursor-not-allowed disabled:opacity-60"
+          className="rounded-md border border-border/70 bg-surface-3 px-2.5 py-1 font-mono text-[12px] font-medium tracking-[0.02em] text-foreground transition hover:bg-surface-2 disabled:cursor-not-allowed disabled:opacity-60"
           onClick={() => onResolve?.(approval.id, "allow-once")}
           disabled={disabled}
           aria-label={`Allow once for exec approval ${approval.id}`}
@@ -155,7 +156,7 @@ const ExecApprovalCard = memo(function ExecApprovalCard({
         </button>
         <button
           type="button"
-          className="rounded-[8px] border border-border/70 bg-surface-3 px-2.5 py-1 font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-foreground transition hover:bg-surface-2 disabled:cursor-not-allowed disabled:opacity-60"
+          className="rounded-md border border-border/70 bg-surface-3 px-2.5 py-1 font-mono text-[12px] font-medium tracking-[0.02em] text-foreground transition hover:bg-surface-2 disabled:cursor-not-allowed disabled:opacity-60"
           onClick={() => onResolve?.(approval.id, "allow-always")}
           disabled={disabled}
           aria-label={`Always allow for exec approval ${approval.id}`}
@@ -164,7 +165,7 @@ const ExecApprovalCard = memo(function ExecApprovalCard({
         </button>
         <button
           type="button"
-          className="rounded-[8px] border border-destructive/35 bg-destructive/12 px-2.5 py-1 font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-destructive transition hover:bg-destructive/20 disabled:cursor-not-allowed disabled:opacity-60"
+          className="rounded-md border border-destructive/35 bg-destructive/12 px-2.5 py-1 font-mono text-[12px] font-medium tracking-[0.02em] text-destructive transition hover:bg-destructive/20 disabled:cursor-not-allowed disabled:opacity-60"
           onClick={() => onResolve?.(approval.id, "deny")}
           disabled={disabled}
           aria-label={`Deny exec approval ${approval.id}`}
@@ -187,7 +188,7 @@ const ToolCallDetails = memo(function ToolCallDetails({
   const [open, setOpen] = useState(false);
   const resolvedClassName =
     className ??
-    `w-full ${ASSISTANT_MAX_WIDTH_EXPANDED_CLASS} ${ASSISTANT_GUTTER_CLASS} self-start rounded-[8px] border border-border/70 bg-surface-3 px-2 py-1 text-[10px] text-muted-foreground`;
+    `w-full ${ASSISTANT_MAX_WIDTH_EXPANDED_CLASS} ${ASSISTANT_GUTTER_CLASS} self-start rounded-md bg-surface-3 px-2 py-1 text-[10px] text-muted-foreground shadow-2xs`;
   if (inlineOnly) {
     return (
       <div className={resolvedClassName}>
@@ -247,7 +248,7 @@ const ThinkingDetailsRow = memo(function ThinkingDetailsRow({
   return (
     <details
       open={open}
-      className="group rounded-[8px] border border-border/70 bg-surface-2 px-2 py-1.5 text-[10px] text-muted-foreground/80"
+      className="group rounded-md bg-surface-2 px-2 py-1.5 text-[10px] text-muted-foreground/80 shadow-2xs"
     >
       <summary
         className="flex cursor-pointer list-none items-center gap-2 opacity-65 [&::-webkit-details-marker]:hidden"
@@ -258,11 +259,11 @@ const ThinkingDetailsRow = memo(function ThinkingDetailsRow({
       >
         <ChevronRight className="h-3 w-3 shrink-0 transition group-open:rotate-90" />
         <span className="flex min-w-0 items-center gap-2">
-          <span className="font-mono text-[9px] font-semibold uppercase tracking-[0.12em]">
+          <span className="font-mono text-[10px] font-medium tracking-[0.02em]">
             Thinking (internal)
           </span>
           {typeof durationMs === "number" ? (
-            <span className="inline-flex items-center gap-1 font-mono text-[9px] font-semibold uppercase tracking-[0.12em] text-muted-foreground/80">
+            <span className="inline-flex items-center gap-1 font-mono text-[10px] font-medium tracking-[0.02em] text-muted-foreground/80">
               <Clock className="h-3 w-3" />
               {formatDurationLabel(durationMs)}
             </span>
@@ -290,7 +291,7 @@ const ThinkingDetailsRow = memo(function ThinkingDetailsRow({
               <ToolCallDetails
                 key={`thinking-tool-${index}-${event.text.slice(0, 48)}`}
                 line={event.text}
-                className="rounded-[8px] border border-border/70 bg-surface-3 px-2 py-1 text-[10px] text-muted-foreground"
+                className="rounded-md bg-surface-3 px-2 py-1 text-[10px] text-muted-foreground shadow-2xs"
               />
             )
           )}
@@ -308,18 +309,18 @@ const UserMessageCard = memo(function UserMessageCard({
   timestampMs?: number;
 }) {
   return (
-    <div className="w-full max-w-[70ch] self-end overflow-hidden rounded-[8px] border border-primary/25 bg-primary/12">
-      <div className="flex items-center justify-between gap-3 bg-primary/18 px-3 py-2">
-        <div className="min-w-0 truncate font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-foreground/90">
+    <div className="w-full max-w-[70ch] self-end overflow-hidden rounded-md bg-[color:var(--chat-user-bg)] shadow-2xs">
+      <div className="flex items-center justify-between gap-3 bg-[color:var(--chat-user-header-bg)] px-3 py-2">
+        <div className="type-meta min-w-0 truncate font-mono text-foreground/90">
           You
         </div>
         {typeof timestampMs === "number" ? (
-          <time className="shrink-0 rounded-full bg-surface-3 px-2 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground/90">
+          <time className="type-meta shrink-0 rounded-md bg-surface-3 px-2 py-0.5 font-mono text-muted-foreground/70">
             {formatChatTimestamp(timestampMs)}
           </time>
         ) : null}
       </div>
-      <div className="agent-markdown px-3 py-2.5 text-foreground">
+      <div className="agent-markdown type-body px-3 py-3 text-foreground">
         <ReactMarkdown remarkPlugins={[remarkGfm]}>{text}</ReactMarkdown>
       </div>
     </div>
@@ -368,11 +369,11 @@ const AssistantMessageCard = memo(function AssistantMessageCard({
           <AgentAvatar seed={avatarSeed} name={name} avatarUrl={avatarUrl} size={22} />
         </div>
         <div className="flex items-center justify-between gap-3 py-0.5">
-          <div className="min-w-0 truncate font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-foreground/90">
+          <div className="type-meta min-w-0 truncate font-mono text-foreground/90">
             {name}
           </div>
           {resolvedTimestamp !== null ? (
-            <time className="shrink-0 rounded-full bg-surface-3 px-2 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground/90">
+            <time className="type-meta shrink-0 rounded-md bg-surface-3 px-2 py-0.5 font-mono text-muted-foreground/90">
               {formatChatTimestamp(resolvedTimestamp)}
             </time>
           ) : null}
@@ -380,12 +381,12 @@ const AssistantMessageCard = memo(function AssistantMessageCard({
 
         {compactStreamingIndicator ? (
           <div
-            className="mt-2 inline-flex items-center gap-2 rounded-[8px] border border-border/70 bg-surface-3 px-3 py-2 text-[10px] text-muted-foreground/80"
+            className="mt-2 inline-flex items-center gap-2 rounded-md bg-surface-3 px-3 py-2 text-[10px] text-muted-foreground/80 shadow-2xs"
             role="status"
             aria-live="polite"
             data-testid="agent-typing-indicator"
           >
-            <span className="font-mono text-[9px] font-semibold uppercase tracking-[0.12em]">
+            <span className="font-mono text-[10px] font-medium tracking-[0.02em]">
               Thinking
             </span>
             <span className="typing-dots" aria-hidden="true">
@@ -403,7 +404,7 @@ const AssistantMessageCard = memo(function AssistantMessageCard({
                 aria-live="polite"
                 data-testid="agent-typing-indicator"
               >
-                <span className="font-mono text-[9px] font-semibold uppercase tracking-[0.12em]">
+                <span className="font-mono text-[10px] font-medium tracking-[0.02em]">
                   Thinking
                 </span>
                 <span className="typing-dots" aria-hidden="true">
@@ -676,17 +677,17 @@ const AgentChatTranscript = memo(function AgentChatTranscript({
           event.stopPropagation();
         }}
       >
-        <div className="relative flex flex-col gap-4 text-xs text-foreground">
+        <div className="relative flex flex-col gap-6 text-[14px] leading-[1.65] text-foreground">
           <div aria-hidden className={`pointer-events-none absolute ${SPINE_LEFT} top-0 bottom-0 w-px bg-border/20`} />
           {historyMaybeTruncated && isAtTop ? (
-            <div className="-mx-1 flex items-center justify-between gap-3 rounded-[10px] border border-border/70 bg-surface-2 px-3 py-2">
-              <div className="min-w-0 truncate font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+            <div className="-mx-1 flex items-center justify-between gap-3 rounded-md bg-surface-2 px-3 py-2 shadow-2xs">
+              <div className="type-meta min-w-0 truncate font-mono text-muted-foreground">
                 Showing most recent {typeof historyFetchedCount === "number" ? historyFetchedCount : "?"} messages
                 {typeof historyFetchLimit === "number" ? ` (limit ${historyFetchLimit})` : ""}
               </div>
               <button
                 type="button"
-                className="shrink-0 rounded-[8px] border border-border/70 bg-surface-3 px-3 py-1.5 font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-foreground transition hover:bg-surface-2"
+                className="shrink-0 rounded-md border border-border/70 bg-surface-3 px-3 py-1.5 font-mono text-[12px] font-medium tracking-[0.02em] text-foreground transition hover:bg-surface-2"
                 onClick={onLoadMoreHistory}
               >
                 Load more
@@ -738,7 +739,7 @@ const AgentChatTranscript = memo(function AgentChatTranscript({
       {showJumpToLatest ? (
         <button
           type="button"
-          className="absolute bottom-3 left-1/2 -translate-x-1/2 rounded-[8px] border border-border/70 bg-surface-2 px-3 py-1.5 font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-foreground transition hover:bg-surface-3"
+          className="absolute bottom-3 left-1/2 -translate-x-1/2 rounded-md border border-border/70 bg-card px-3 py-1.5 font-mono text-[12px] font-medium tracking-[0.02em] text-foreground shadow-xs transition hover:bg-surface-2"
           onClick={() => {
             setPinned(true);
             scrollChatToBottom();
@@ -786,7 +787,7 @@ const AgentChatComposer = memo(function AgentChatComposer({
         ref={inputRef}
         rows={1}
         value={value}
-        className="flex-1 resize-none rounded-[8px] border border-border/70 bg-surface-3 px-3 py-2 text-[11px] text-foreground outline-none transition"
+        className="flex-1 resize-none rounded-md border border-border/70 bg-surface-3 px-3 py-2 text-[13px] text-foreground outline-none transition"
         onChange={onChange}
         onKeyDown={onKeyDown}
         placeholder="type a message"
@@ -794,7 +795,7 @@ const AgentChatComposer = memo(function AgentChatComposer({
       {running ? (
         <span className="inline-flex" title={stopReason || undefined}>
           <button
-            className="rounded-[8px] border border-border/70 bg-surface-3 px-3 py-2 font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-foreground transition hover:bg-surface-2 disabled:cursor-not-allowed disabled:bg-muted disabled:text-muted-foreground"
+            className="rounded-md border border-border/70 bg-surface-3 px-3 py-2 font-mono text-[12px] font-medium tracking-[0.02em] text-foreground transition hover:bg-surface-2 disabled:cursor-not-allowed disabled:bg-muted disabled:text-muted-foreground"
             type="button"
             onClick={onStop}
             disabled={stopDisabled}
@@ -805,7 +806,7 @@ const AgentChatComposer = memo(function AgentChatComposer({
         </span>
       ) : null}
       <button
-        className="rounded-[8px] border border-transparent bg-primary px-3 py-2 font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-primary-foreground transition hover:brightness-105 disabled:cursor-not-allowed disabled:border-border disabled:bg-muted disabled:text-muted-foreground"
+        className="rounded-md border border-transparent bg-primary px-3 py-2 font-mono text-[12px] font-medium tracking-[0.02em] text-primary-foreground transition hover:brightness-105 disabled:cursor-not-allowed disabled:border-border disabled:bg-muted disabled:text-muted-foreground"
         type="button"
         onClick={onSend}
         disabled={sendDisabled}
@@ -825,6 +826,7 @@ export const AgentChatPanel = ({
   stopDisabledReason = null,
   onLoadMoreHistory,
   onOpenSettings,
+  onOpenBrain,
   onModelChange,
   onThinkingChange,
   onDraftChange,
@@ -909,7 +911,7 @@ export const AgentChatPanel = ({
 
   const statusColor =
     agent.status === "running"
-      ? "border border-primary/30 bg-primary/15 text-foreground"
+      ? "border border-border/55 bg-accent/70 text-foreground"
       : agent.status === "error"
         ? "border border-destructive/35 bg-destructive/12 text-destructive"
         : "border border-border/70 bg-muted text-muted-foreground";
@@ -1000,7 +1002,7 @@ export const AgentChatPanel = ({
                 isSelected={isSelected}
               />
               <button
-                className="nodrag pointer-events-none absolute bottom-1 right-1 flex h-7 w-7 items-center justify-center rounded-full border border-border/80 bg-surface-3 text-muted-foreground opacity-0 transition group-focus-within/avatar:pointer-events-auto group-focus-within/avatar:opacity-100 group-hover/avatar:pointer-events-auto group-hover/avatar:opacity-100 hover:border-border hover:bg-surface-2"
+                className="nodrag ui-btn-icon pointer-events-none absolute bottom-0.5 right-0.5 h-5 w-5 rounded-md opacity-0 group-focus-within/avatar:pointer-events-auto group-focus-within/avatar:opacity-100 group-hover/avatar:pointer-events-auto group-hover/avatar:opacity-100"
                 type="button"
                 aria-label="Shuffle avatar"
                 data-testid="agent-avatar-shuffle"
@@ -1010,30 +1012,30 @@ export const AgentChatPanel = ({
                   onAvatarShuffle();
                 }}
               >
-                <Shuffle className="h-3.5 w-3.5" />
+                <Shuffle className="h-3 w-3" />
               </button>
             </div>
 
             <div className="min-w-0 flex-1">
               <div className="flex min-w-0 items-center gap-2">
-                <div className="min-w-0 truncate text-xs font-semibold uppercase tracking-[0.16em] text-foreground sm:text-sm">
+                <div className="type-agent-name min-w-0 truncate text-foreground">
                   {agent.name}
                 </div>
                 <span aria-hidden className="shrink-0 text-[11px] text-muted-foreground/80">
                   •
                 </span>
                 <span
-                  className={`inline-flex shrink-0 items-center rounded-full px-2 py-0.5 font-mono text-[9px] font-semibold uppercase tracking-[0.14em] ${statusColor}`}
+                  className={`ui-badge shrink-0 ${statusColor}`}
                 >
                   {statusLabel}
                 </span>
               </div>
 
               <div className="mt-2 grid gap-2 sm:grid-cols-[minmax(0,1fr)_128px]">
-                <label className="flex min-w-0 flex-col gap-1 font-mono text-[9px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                <label className="flex min-w-0 flex-col gap-1 font-mono text-[12px] font-medium tracking-[0.02em] text-muted-foreground">
                   <span>Model</span>
                   <select
-                    className="h-8 w-full min-w-0 overflow-hidden text-ellipsis whitespace-nowrap rounded-md border border-border bg-surface-3 px-2 text-[11px] font-semibold text-foreground"
+                    className="ui-input h-8 w-full min-w-0 overflow-hidden text-ellipsis whitespace-nowrap rounded-md px-2 text-[11px] font-semibold text-foreground"
                     aria-label="Model"
                     value={modelValue}
                     onChange={(event) => {
@@ -1052,10 +1054,10 @@ export const AgentChatPanel = ({
                   </select>
                 </label>
                 {allowThinking ? (
-                  <label className="flex flex-col gap-1 font-mono text-[9px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                  <label className="flex flex-col gap-1 font-mono text-[12px] font-medium tracking-[0.02em] text-muted-foreground">
                     <span>Thinking</span>
                     <select
-                      className="h-8 rounded-md border border-border bg-surface-3 px-2 text-[11px] font-semibold text-foreground"
+                      className="ui-input h-8 rounded-md px-2 text-[11px] font-semibold text-foreground"
                       aria-label="Thinking"
                       value={agent.thinkingLevel ?? ""}
                       onChange={(event) => {
@@ -1079,16 +1081,28 @@ export const AgentChatPanel = ({
             </div>
           </div>
 
-          <button
-            className="nodrag mt-0.5 flex h-9 w-9 items-center justify-center rounded-md border border-border/80 bg-surface-3 text-muted-foreground transition hover:border-border hover:bg-surface-2"
-            type="button"
-            data-testid="agent-settings-toggle"
-            aria-label="Open agent settings"
-            title="Agent settings"
-            onClick={onOpenSettings}
-          >
-            <Cog className="h-4 w-4" />
-          </button>
+          <div className="mt-0.5 flex items-center gap-2">
+            <button
+              className="nodrag ui-btn-icon"
+              type="button"
+              data-testid="agent-brain-toggle"
+              aria-label="Open agent brain files"
+              title="Brain files"
+              onClick={() => onOpenBrain?.()}
+            >
+              <Brain className="h-4 w-4" />
+            </button>
+            <button
+              className="nodrag ui-btn-icon"
+              type="button"
+              data-testid="agent-settings-toggle"
+              aria-label="Open agent settings"
+              title="Agent settings"
+              onClick={onOpenSettings}
+            >
+              <Cog className="h-4 w-4" />
+            </button>
+          </div>
         </div>
       </div>
 

@@ -16,9 +16,9 @@ type AgentCreateModalProps = {
 };
 
 const fieldClassName =
-  "w-full rounded-md border border-border/80 bg-surface-3 px-3 py-2 text-xs text-foreground outline-none";
+  "ui-input w-full rounded-md px-3 py-2 text-xs text-foreground outline-none";
 const labelClassName =
-  "font-mono text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground";
+  "font-mono text-[11px] font-semibold tracking-[0.05em] text-muted-foreground";
 
 const resolveInitialName = (suggestedName: string): string => {
   const trimmed = suggestedName.trim();
@@ -67,7 +67,7 @@ export const AgentCreateModal = ({
       onClick={busy ? undefined : onClose}
     >
       <form
-        className="w-full max-w-2xl rounded-lg border border-border bg-card"
+        className="ui-panel w-full max-w-2xl shadow-xs"
         onSubmit={(event) => {
           event.preventDefault();
           handleSubmit();
@@ -75,17 +75,17 @@ export const AgentCreateModal = ({
         onClick={(event) => event.stopPropagation()}
         data-testid="agent-create-modal"
       >
-        <div className="flex items-center justify-between border-b border-border/80 px-5 py-4">
+        <div className="flex items-center justify-between border-b border-border/35 px-6 py-6">
           <div>
-            <div className="font-mono text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-              New Agent
+            <div className="font-mono text-[11px] font-semibold tracking-[0.06em] text-muted-foreground">
+              New agent
             </div>
-            <div className="mt-1 text-base font-semibold text-foreground">Launch Agent</div>
+            <div className="mt-1 text-base font-semibold text-foreground">Launch agent</div>
             <div className="mt-1 text-xs text-muted-foreground">Name it and activate immediately.</div>
           </div>
           <button
             type="button"
-            className="rounded-md border border-border/80 bg-surface-3 px-3 py-1.5 font-mono text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground transition hover:border-border hover:bg-surface-2 disabled:cursor-not-allowed disabled:opacity-60"
+            className="ui-btn-ghost px-3 py-1.5 font-mono text-[11px] font-semibold tracking-[0.06em] disabled:cursor-not-allowed disabled:opacity-60"
             onClick={onClose}
             disabled={busy}
           >
@@ -93,10 +93,11 @@ export const AgentCreateModal = ({
           </button>
         </div>
 
-        <div className="grid gap-4 px-5 py-4">
+        <div className="grid gap-4 px-6 py-5">
           <label className={labelClassName}>
-            Agent name
+            Name
             <input
+              aria-label="Agent name"
               value={name}
               onChange={(event) => setName(event.target.value)}
               className={`mt-1 ${fieldClassName}`}
@@ -106,7 +107,7 @@ export const AgentCreateModal = ({
           <div className="-mt-2 text-[11px] text-muted-foreground">
             You can rename this agent later in settings.
           </div>
-          <div className="grid justify-items-center gap-2 border-t border-border/70 pt-3">
+          <div className="grid justify-items-center gap-2 border-t border-border/40 pt-3">
             <div className={labelClassName}>Choose avatar</div>
             <AgentAvatar
               seed={avatarSeed}
@@ -117,7 +118,7 @@ export const AgentCreateModal = ({
             <button
               type="button"
               aria-label="Shuffle avatar selection"
-              className="inline-flex items-center gap-2 rounded-md border border-border/80 bg-surface-3 px-3 py-2 text-xs text-muted-foreground transition hover:border-border hover:bg-surface-2"
+              className="ui-btn-secondary inline-flex items-center gap-2 px-3 py-2 text-xs text-muted-foreground"
               onClick={() => setAvatarSeed(randomUUID())}
               disabled={busy}
             >
@@ -133,11 +134,11 @@ export const AgentCreateModal = ({
           ) : null}
         </div>
 
-        <div className="flex items-center justify-between border-t border-border/80 px-5 py-3">
+        <div className="flex items-center justify-between border-t border-border/45 px-6 pb-4 pt-5">
           <div className="text-[11px] text-muted-foreground">Authority can be configured after launch.</div>
           <button
             type="submit"
-            className="rounded-md border border-transparent bg-primary px-3 py-1.5 font-mono text-[11px] font-semibold uppercase tracking-[0.12em] text-primary-foreground transition hover:brightness-105 disabled:cursor-not-allowed disabled:border-border disabled:bg-muted disabled:text-muted-foreground"
+            className="ui-btn-primary px-3 py-1.5 font-mono text-[11px] font-semibold tracking-[0.06em] disabled:cursor-not-allowed disabled:border-border disabled:bg-muted disabled:text-muted-foreground"
             disabled={!canSubmit || busy}
           >
             {busy ? "Launching..." : "Launch agent"}

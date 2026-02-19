@@ -73,9 +73,37 @@ describe("AgentChatPanel controls", () => {
     expect(screen.getByText("Model")).toBeInTheDocument();
     expect(screen.getByText("Thinking")).toBeInTheDocument();
     expect(screen.queryByDisplayValue("Agent One")).not.toBeInTheDocument();
+    expect(screen.getByTestId("agent-brain-toggle")).toBeInTheDocument();
+    expect(screen.getByLabelText("Open agent brain files")).toBeInTheDocument();
     expect(screen.getByTestId("agent-settings-toggle")).toBeInTheDocument();
     expect(screen.getByLabelText("Open agent settings")).toBeInTheDocument();
     expect(screen.queryByText("Inspect")).not.toBeInTheDocument();
+  });
+
+  it("invokes_on_open_brain_when_control_clicked", () => {
+    const onOpenBrain = vi.fn();
+
+    render(
+      createElement(AgentChatPanel, {
+        agent: createAgent(),
+        isSelected: true,
+        canSend: true,
+        models,
+        stopBusy: false,
+        onLoadMoreHistory: vi.fn(),
+        onOpenSettings: vi.fn(),
+        onOpenBrain,
+        onModelChange: vi.fn(),
+        onThinkingChange: vi.fn(),
+        onDraftChange: vi.fn(),
+        onSend: vi.fn(),
+        onStopRun: vi.fn(),
+        onAvatarShuffle: vi.fn(),
+      })
+    );
+
+    fireEvent.click(screen.getByTestId("agent-brain-toggle"));
+    expect(onOpenBrain).toHaveBeenCalledTimes(1);
   });
 
   it("invokes_on_model_change_when_model_select_changes", () => {

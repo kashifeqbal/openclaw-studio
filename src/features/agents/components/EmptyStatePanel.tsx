@@ -25,13 +25,13 @@ export const EmptyStatePanel = ({
   return (
     <div
       className={cn(
-        "rounded-md border border-border/80 bg-surface-1 text-muted-foreground",
+        "ui-card text-muted-foreground",
         fillHeight ? "flex h-full w-full flex-col justify-center" : "",
         className
       )}
     >
       {label ? (
-        <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+        <p className="font-mono text-[10px] font-semibold tracking-[0.06em] text-muted-foreground">
           {label}
         </p>
       ) : null}
@@ -49,7 +49,7 @@ export const EmptyStatePanel = ({
         </p>
       ) : null}
       {detail ? (
-        <p className="mt-3 rounded-md border border-border/80 bg-surface-3 px-4 py-2 font-mono text-[11px] text-muted-foreground/90">
+        <p className="ui-input mt-3 rounded-md px-4 py-2 font-mono text-[11px] text-muted-foreground/90">
           {detail}
         </p>
       ) : null}

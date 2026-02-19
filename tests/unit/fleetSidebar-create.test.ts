@@ -44,7 +44,7 @@ describe("FleetSidebar new agent action", () => {
     cleanup();
   });
 
-  it("renders New Agent button", () => {
+  it("renders New agent button", () => {
     render(
       createElement(FleetSidebar, {
         agents: [createAgent()],
@@ -57,7 +57,7 @@ describe("FleetSidebar new agent action", () => {
     );
 
     expect(screen.getByTestId("fleet-new-agent-button")).toBeInTheDocument();
-    expect(screen.getByText("New Agent")).toBeInTheDocument();
+    expect(screen.getByText("New agent")).toBeInTheDocument();
   });
 
   it("calls onCreateAgent when clicked", () => {

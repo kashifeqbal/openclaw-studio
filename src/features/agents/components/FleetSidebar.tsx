@@ -27,8 +27,8 @@ const statusLabel: Record<AgentState["status"], string> = {
 };
 
 const statusClassName: Record<AgentState["status"], string> = {
-  idle: "border border-border/70 bg-muted text-muted-foreground",
-  running: "border border-primary/30 bg-primary/15 text-foreground",
+  idle: "bg-muted/48 text-muted-foreground/70",
+  running: "border border-border/55 bg-accent/70 text-foreground",
   error: "border border-destructive/35 bg-destructive/12 text-destructive",
 };
 
@@ -78,23 +78,23 @@ export const FleetSidebar = ({
 
   return (
     <aside
-      className="glass-panel fade-up-delay relative flex h-full w-full min-w-72 flex-col gap-3 bg-sidebar p-3 xl:max-w-[320px] xl:border-r xl:border-sidebar-border"
+      className="glass-panel fade-up-delay ui-panel relative flex h-full w-full min-w-72 flex-col gap-3 bg-sidebar p-3 xl:max-w-[320px] xl:border-r xl:border-sidebar-border"
       data-testid="fleet-sidebar"
     >
       <div className="flex items-center justify-between gap-2 px-1">
-        <p className="console-title text-2xl leading-none text-foreground">Agents ({agents.length})</p>
+        <p className="console-title type-page-title text-foreground">Agents ({agents.length})</p>
         <button
           type="button"
           data-testid="fleet-new-agent-button"
-          className="rounded-md border border-transparent bg-primary px-3 py-2 font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-primary-foreground transition hover:brightness-105 disabled:cursor-not-allowed disabled:border-border disabled:bg-muted disabled:text-muted-foreground"
+          className="ui-btn-primary px-3 py-2 font-mono text-[12px] font-medium tracking-[0.02em] disabled:cursor-not-allowed disabled:border-border disabled:bg-muted disabled:text-muted-foreground"
           onClick={onCreateAgent}
           disabled={createDisabled || createBusy}
         >
-          {createBusy ? "Creating..." : "New Agent"}
+          {createBusy ? "Creating..." : "New agent"}
         </button>
       </div>
 
-      <div className="flex flex-wrap gap-2">
+      <div className="ui-segment grid-cols-3">
         {FILTER_OPTIONS.map((option) => {
           const active = filter === option.value;
           return (
@@ -103,11 +103,8 @@ export const FleetSidebar = ({
               type="button"
               data-testid={option.testId}
               aria-pressed={active}
-                className={`rounded-md border px-2 py-1 font-mono text-[10px] font-semibold uppercase tracking-[0.13em] transition ${
-                active
-                  ? "border-border bg-surface-2 text-foreground"
-                  : "border-border/80 bg-surface-1 text-muted-foreground hover:border-border hover:bg-surface-2"
-              }`}
+              className="ui-segment-item px-2 py-1 font-mono text-[12px] font-medium tracking-[0.02em]"
+              data-active={active ? "true" : "false"}
               onClick={() => onFilterChange(option.value)}
             >
               {option.label}
@@ -116,11 +113,11 @@ export const FleetSidebar = ({
         })}
       </div>
 
-      <div ref={scrollContainerRef} className="min-h-0 flex-1 overflow-auto">
+      <div ref={scrollContainerRef} className="ui-scroll min-h-0 flex-1 overflow-auto">
         {agents.length === 0 ? (
           <EmptyStatePanel title="No agents available." compact className="p-3 text-xs" />
         ) : (
-          <div className="flex flex-col gap-2">
+          <div className="flex flex-col gap-4">
             {agents.map((agent) => {
               const selected = selectedAgentId === agent.agentId;
               const avatarSeed = agent.avatarSeed ?? agent.agentId;
@@ -136,10 +133,10 @@ export const FleetSidebar = ({
                   }}
                   type="button"
                   data-testid={`fleet-agent-row-${agent.agentId}`}
-                  className={`group flex w-full items-center gap-3 rounded-md border px-3 py-2 text-left transition ${
+                  className={`group ui-card flex w-full items-center gap-4 px-3 py-5 text-left transition ${
                     selected
-                      ? "border-ring/45 bg-surface-2"
-                      : "border-border/70 bg-surface-1 hover:border-border hover:bg-surface-2"
+                      ? "bg-surface-2 shadow-2xs"
+                      : "hover:bg-surface-2"
                   }`}
                   onClick={() => onSelectAgent(agent.agentId)}
                 >
@@ -151,17 +148,19 @@ export const FleetSidebar = ({
                     isSelected={selected}
                   />
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-[11px] font-semibold uppercase tracking-[0.13em] text-foreground">
+                    <p className="type-secondary-heading truncate text-foreground">
                       {agent.name}
                     </p>
-                    <div className="mt-1 flex flex-wrap items-center gap-2">
+                    <div className="mt-3 flex flex-wrap items-center gap-3">
                       <span
-                        className={`rounded px-1.5 py-0.5 font-mono text-[9px] font-semibold uppercase tracking-[0.12em] ${statusClassName[agent.status]}`}
+                        className={`ui-badge ${statusClassName[agent.status]} ${
+                          agent.status === "idle" ? "px-2 py-0.5 text-[11px] tracking-[0.03em]" : ""
+                        }`}
                       >
                         {statusLabel[agent.status]}
                       </span>
                       {agent.awaitingUserInput ? (
-                        <span className="rounded border border-amber-500/35 bg-amber-500/12 px-1.5 py-0.5 font-mono text-[9px] font-semibold uppercase tracking-[0.12em] text-amber-700">
+                        <span className="ui-badge border border-amber-500/35 bg-amber-500/12 text-amber-700">
                           Needs approval
                         </span>
                       ) : null}
