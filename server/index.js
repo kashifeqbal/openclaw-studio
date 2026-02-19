@@ -70,8 +70,9 @@ async function main() {
   });
 
   server.listen(port, hostname, () => {
-    // Keep log minimal but actionable.
-    console.info(`Studio server listening on http://${hostname}:${port} (dev=${dev})`);
+    const hostForBrowser = hostname === "0.0.0.0" ? "localhost" : hostname;
+    const browserUrl = `http://${hostForBrowser}:${port}`;
+    console.info(`Open in browser: ${browserUrl}`);
   });
 }
 
