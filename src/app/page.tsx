@@ -77,7 +77,6 @@ import { deleteAgentViaStudio } from "@/features/agents/operations/deleteAgentOp
 import { performCronCreateFlow } from "@/features/agents/operations/cronCreateOperation";
 import { sendChatMessageViaStudio } from "@/features/agents/operations/chatSendOperation";
 import { hydrateAgentFleetFromGateway } from "@/features/agents/operations/agentFleetHydration";
-import { resolveConfigMutationStatusLine } from "@/features/agents/operations/mutationLifecycleWorkflow";
 import { useConfigMutationQueue } from "@/features/agents/operations/useConfigMutationQueue";
 import { isLocalGatewayUrl } from "@/lib/gateway/local-gateway";
 import { shouldAwaitDisconnectRestartForRemoteMutation } from "@/lib/gateway/gatewayReloadMode";
@@ -126,41 +125,22 @@ import {
 } from "@/features/agents/operations/historySyncOperation";
 import {
   buildQueuedMutationBlock,
-  resolveMutationStartGuard,
-} from "@/features/agents/operations/mutationLifecycleWorkflow";
-import { runAgentConfigMutationLifecycle } from "@/features/agents/operations/agentConfigMutationLifecycleOperation";
-import {
   isCreateBlockTimedOut,
+  resolveMutationStartGuard,
+  resolveConfigMutationStatusLine,
+  runAgentConfigMutationLifecycle,
   runCreateAgentMutationLifecycle,
-} from "@/features/agents/operations/createAgentMutationLifecycleOperation";
+  type CreateAgentBlockState,
+  type MutationBlockState,
+  type MutationWorkflowKind,
+} from "@/features/agents/operations/mutationLifecycleWorkflow";
 
 const DEFAULT_CHAT_HISTORY_LIMIT = 200;
 const MAX_CHAT_HISTORY_LIMIT = 5000;
 const PENDING_EXEC_APPROVAL_PRUNE_GRACE_MS = 500;
 
 type MobilePane = "fleet" | "chat" | "settings" | "brain";
-type DeleteAgentBlockPhase = "queued" | "deleting" | "awaiting-restart";
-type DeleteAgentBlockState = {
-  agentId: string;
-  agentName: string;
-  phase: DeleteAgentBlockPhase;
-  startedAt: number;
-  sawDisconnect: boolean;
-};
-type CreateAgentBlockPhase = "queued" | "creating";
-type CreateAgentBlockState = {
-  agentName: string;
-  phase: CreateAgentBlockPhase;
-  startedAt: number;
-};
-type RenameAgentBlockPhase = "queued" | "renaming" | "awaiting-restart";
-type RenameAgentBlockState = {
-  agentId: string;
-  agentName: string;
-  phase: RenameAgentBlockPhase;
-  startedAt: number;
-  sawDisconnect: boolean;
-};
+type RestartingMutationBlockState = MutationBlockState & { kind: MutationWorkflowKind };
 
 const RESERVED_MAIN_AGENT_ID = "main";
 
@@ -233,9 +213,9 @@ const AgentStudioPage = () => {
   const [heartbeatRunBusyId, setHeartbeatRunBusyId] = useState<string | null>(null);
   const [heartbeatDeleteBusyId, setHeartbeatDeleteBusyId] = useState<string | null>(null);
   const [brainPanelOpen, setBrainPanelOpen] = useState(false);
-  const [deleteAgentBlock, setDeleteAgentBlock] = useState<DeleteAgentBlockState | null>(null);
   const [createAgentBlock, setCreateAgentBlock] = useState<CreateAgentBlockState | null>(null);
-  const [renameAgentBlock, setRenameAgentBlock] = useState<RenameAgentBlockState | null>(null);
+  const [restartingMutationBlock, setRestartingMutationBlock] =
+    useState<RestartingMutationBlockState | null>(null);
   const [pendingExecApprovalsByAgentId, setPendingExecApprovalsByAgentId] = useState<
     Record<string, PendingExecApproval[]>
   >({});
@@ -340,10 +320,11 @@ const AgentStudioPage = () => {
   const hasRunningAgents = runningAgentCount > 0;
   const isLocalGateway = useMemo(() => isLocalGatewayUrl(gatewayUrl), [gatewayUrl]);
 
+  const hasRenameMutationBlock = restartingMutationBlock?.kind === "rename-agent";
+  const hasDeleteMutationBlock = restartingMutationBlock?.kind === "delete-agent";
   const hasRestartBlockInProgress = Boolean(
-    (deleteAgentBlock && deleteAgentBlock.phase !== "queued") ||
-      (createAgentBlock && createAgentBlock.phase !== "queued") ||
-      (renameAgentBlock && renameAgentBlock.phase !== "queued")
+    (restartingMutationBlock && restartingMutationBlock.phase !== "queued") ||
+      (createAgentBlock && createAgentBlock.phase !== "queued")
   );
 
   const { enqueueConfigMutation, queuedCount: queuedConfigMutationCount, activeConfigMutation } =
@@ -789,17 +770,15 @@ const AgentStudioPage = () => {
 
   useEffect(() => {
     if (status !== "connected" || !focusedPreferencesLoaded) return;
-    if (deleteAgentBlock && deleteAgentBlock.phase !== "queued") return;
+    if (restartingMutationBlock && restartingMutationBlock.phase !== "queued") return;
     if (createAgentBlock && createAgentBlock.phase !== "queued") return;
-    if (renameAgentBlock && renameAgentBlock.phase !== "queued") return;
     void loadAgents();
   }, [
     createAgentBlock,
-    deleteAgentBlock,
     focusedPreferencesLoaded,
     gatewayUrl,
     loadAgents,
-    renameAgentBlock,
+    restartingMutationBlock,
     status,
   ]);
 
@@ -1141,58 +1120,54 @@ const AgentStudioPage = () => {
     [dispatch, flushPendingDraft, focusedAgent]
   );
 
-  const handleDeleteAgent = useCallback(
-    async (agentId: string) => {
-      const guard = resolveMutationStartGuard({
-        status: "connected",
-        hasCreateBlock: Boolean(createAgentBlock),
-        hasRenameBlock: Boolean(renameAgentBlock),
-        hasDeleteBlock: Boolean(deleteAgentBlock),
-      });
-      if (guard.kind === "deny") return;
-      if (agentId === RESERVED_MAIN_AGENT_ID) {
-        setError("The main agent cannot be deleted.");
-        return;
-      }
-      const agent = agents.find((entry) => entry.agentId === agentId);
-      if (!agent) return;
-      const confirmed = window.confirm(
-        `Delete ${agent.name}? This removes the agent from gateway config + cron and moves its workspace/state into ~/.openclaw/trash on the gateway host.`
-      );
-      if (!confirmed) return;
-      await runAgentConfigMutationLifecycle({
-        kind: "delete-agent",
-        label: `Delete ${agent.name}`,
+  const runRestartingMutationLifecycle = useCallback(
+    async (params: {
+      kind: MutationWorkflowKind;
+      agentId: string;
+      agentName: string;
+      label: string;
+      executeMutation: () => Promise<void>;
+    }) => {
+      return await runAgentConfigMutationLifecycle({
+        kind: params.kind,
+        label: params.label,
         isLocalGateway,
         deps: {
           enqueueConfigMutation,
           setQueuedBlock: () => {
-            const queuedDeleteBlock = buildQueuedMutationBlock({
-              kind: "delete-agent",
-              agentId,
-              agentName: agent.name,
+            const queuedBlock = buildQueuedMutationBlock({
+              kind: params.kind,
+              agentId: params.agentId,
+              agentName: params.agentName,
               startedAt: Date.now(),
             });
-            setDeleteAgentBlock({
-              agentId: queuedDeleteBlock.agentId,
-              agentName: queuedDeleteBlock.agentName,
-              phase: "queued",
-              startedAt: queuedDeleteBlock.startedAt,
-              sawDisconnect: queuedDeleteBlock.sawDisconnect,
+            setRestartingMutationBlock({
+              kind: params.kind,
+              agentId: queuedBlock.agentId,
+              agentName: queuedBlock.agentName,
+              phase: queuedBlock.phase,
+              startedAt: queuedBlock.startedAt,
+              sawDisconnect: queuedBlock.sawDisconnect,
             });
           },
           setMutatingBlock: () => {
-            setDeleteAgentBlock((current) => {
-              if (!current || current.agentId !== agentId) return current;
+            setRestartingMutationBlock((current) => {
+              if (!current) return current;
+              if (current.kind !== params.kind || current.agentId !== params.agentId) {
+                return current;
+              }
               return {
                 ...current,
-                phase: "deleting",
+                phase: "mutating",
               };
             });
           },
           patchBlockAwaitingRestart: (patch) => {
-            setDeleteAgentBlock((current) => {
-              if (!current || current.agentId !== agentId) return current;
+            setRestartingMutationBlock((current) => {
+              if (!current) return current;
+              if (current.kind !== params.kind || current.agentId !== params.agentId) {
+                return current;
+              }
               return {
                 ...current,
                 ...patch,
@@ -1200,17 +1175,15 @@ const AgentStudioPage = () => {
             });
           },
           clearBlock: () => {
-            setDeleteAgentBlock(null);
-          },
-          executeMutation: async () => {
-            await deleteAgentViaStudio({
-              client,
-              agentId,
-              fetchJson,
-              logError: (message, error) => console.error(message, error),
+            setRestartingMutationBlock((current) => {
+              if (!current) return current;
+              if (current.kind !== params.kind || current.agentId !== params.agentId) {
+                return current;
+              }
+              return null;
             });
-            setSettingsAgentId(null);
           },
+          executeMutation: params.executeMutation,
           shouldAwaitRemoteRestart: async () =>
             shouldAwaitDisconnectRestartForRemoteMutation({
               client,
@@ -1227,36 +1200,54 @@ const AgentStudioPage = () => {
         },
       });
     },
+    [client, enqueueConfigMutation, gatewayConfigSnapshot, isLocalGateway, loadAgents, setError]
+  );
+
+  const handleDeleteAgent = useCallback(
+    async (agentId: string) => {
+      const guard = resolveMutationStartGuard({
+        status: "connected",
+        hasCreateBlock: Boolean(createAgentBlock),
+        hasRenameBlock: hasRenameMutationBlock,
+        hasDeleteBlock: hasDeleteMutationBlock,
+      });
+      if (guard.kind === "deny") return;
+      if (agentId === RESERVED_MAIN_AGENT_ID) {
+        setError("The main agent cannot be deleted.");
+        return;
+      }
+      const agent = agents.find((entry) => entry.agentId === agentId);
+      if (!agent) return;
+      const confirmed = window.confirm(
+        `Delete ${agent.name}? This removes the agent from gateway config + cron and moves its workspace/state into ~/.openclaw/trash on the gateway host.`
+      );
+      if (!confirmed) return;
+      await runRestartingMutationLifecycle({
+        kind: "delete-agent",
+        agentId,
+        agentName: agent.name,
+        label: `Delete ${agent.name}`,
+        executeMutation: async () => {
+          await deleteAgentViaStudio({
+            client,
+            agentId,
+            fetchJson,
+            logError: (message, error) => console.error(message, error),
+          });
+          setSettingsAgentId(null);
+        },
+      });
+    },
     [
       agents,
       client,
       createAgentBlock,
-      deleteAgentBlock,
-      enqueueConfigMutation,
-      gatewayConfigSnapshot,
-      isLocalGateway,
-      loadAgents,
-      renameAgentBlock,
+      hasDeleteMutationBlock,
+      hasRenameMutationBlock,
+      runRestartingMutationLifecycle,
       setError,
     ]
   );
-
-  useGatewayRestartBlock({
-    status,
-    block: deleteAgentBlock,
-    setBlock: setDeleteAgentBlock,
-    maxWaitMs: 90_000,
-    onTimeout: () => {
-      setDeleteAgentBlock(null);
-      setError("Gateway restart timed out after deleting the agent.");
-    },
-    onRestartComplete: async (_, ctx) => {
-      await loadAgents();
-      if (ctx.isCancelled()) return;
-      setDeleteAgentBlock(null);
-      setMobilePane("chat");
-    },
-  });
 
   const handleCreateCronJob = useCallback(
     async (agentId: string, draft: CronCreateDraft) => {
@@ -1389,11 +1380,10 @@ const AgentStudioPage = () => {
   const handleOpenCreateAgentModal = useCallback(() => {
     if (createAgentBusy) return;
     if (createAgentBlock) return;
-    if (deleteAgentBlock) return;
-    if (renameAgentBlock) return;
+    if (restartingMutationBlock) return;
     setCreateAgentModalError(null);
     setCreateAgentModalOpen(true);
-  }, [createAgentBlock, createAgentBusy, deleteAgentBlock, renameAgentBlock]);
+  }, [createAgentBlock, createAgentBusy, restartingMutationBlock]);
 
   const persistAvatarSeed = useCallback(
     (agentId: string, avatarSeed: string) => {
@@ -1422,8 +1412,8 @@ const AgentStudioPage = () => {
           payload,
           status,
           hasCreateBlock: Boolean(createAgentBlock),
-          hasRenameBlock: Boolean(renameAgentBlock),
-          hasDeleteBlock: Boolean(deleteAgentBlock),
+          hasRenameBlock: hasRenameMutationBlock,
+          hasDeleteBlock: hasDeleteMutationBlock,
           createAgentBusy,
         },
         {
@@ -1523,16 +1513,16 @@ const AgentStudioPage = () => {
       client,
       createAgentBusy,
       createAgentBlock,
-      deleteAgentBlock,
       dispatch,
       enqueueConfigMutation,
       flushPendingDraft,
       focusedAgent,
+      hasDeleteMutationBlock,
+      hasRenameMutationBlock,
       handleOpenAgentSettings,
       loadAgents,
       persistAvatarSeed,
       refreshGatewayConfigSnapshot,
-      renameAgentBlock,
       setError,
       status,
     ]
@@ -1577,17 +1567,21 @@ const AgentStudioPage = () => {
 
   useGatewayRestartBlock({
     status,
-    block: renameAgentBlock,
-    setBlock: setRenameAgentBlock,
+    block: restartingMutationBlock,
+    setBlock: setRestartingMutationBlock,
     maxWaitMs: 90_000,
     onTimeout: () => {
-      setRenameAgentBlock(null);
-      setError("Gateway restart timed out after renaming the agent.");
+      const timeoutMessage =
+        restartingMutationBlock?.kind === "delete-agent"
+          ? "Gateway restart timed out after deleting the agent."
+          : "Gateway restart timed out after renaming the agent.";
+      setRestartingMutationBlock(null);
+      setError(timeoutMessage);
     },
     onRestartComplete: async (_, ctx) => {
       await loadAgents();
       if (ctx.isCancelled()) return;
-      setRenameAgentBlock(null);
+      setRestartingMutationBlock(null);
       setMobilePane("chat");
     },
   });
@@ -1627,7 +1621,7 @@ const AgentStudioPage = () => {
         });
       }
     },
-    [agents, client, dispatch, setError]
+    [agents, client, dispatch, setError, specialLatestUpdate]
   );
 
   useEffect(() => {
@@ -2066,76 +2060,28 @@ const AgentStudioPage = () => {
       const guard = resolveMutationStartGuard({
         status: "connected",
         hasCreateBlock: Boolean(createAgentBlock),
-        hasRenameBlock: Boolean(renameAgentBlock),
-        hasDeleteBlock: Boolean(deleteAgentBlock),
+        hasRenameBlock: hasRenameMutationBlock,
+        hasDeleteBlock: hasDeleteMutationBlock,
       });
       if (guard.kind === "deny") return false;
       const agent = agents.find((entry) => entry.agentId === agentId);
       if (!agent) return false;
-      return await runAgentConfigMutationLifecycle({
+      return await runRestartingMutationLifecycle({
         kind: "rename-agent",
+        agentId,
+        agentName: name,
         label: `Rename ${agent.name}`,
-        isLocalGateway,
-        deps: {
-          enqueueConfigMutation,
-          setQueuedBlock: () => {
-            const queuedRenameBlock = buildQueuedMutationBlock({
-              kind: "rename-agent",
-              agentId,
-              agentName: name,
-              startedAt: Date.now(),
-            });
-            setRenameAgentBlock({
-              agentId: queuedRenameBlock.agentId,
-              agentName: queuedRenameBlock.agentName,
-              phase: "queued",
-              startedAt: queuedRenameBlock.startedAt,
-              sawDisconnect: queuedRenameBlock.sawDisconnect,
-            });
-          },
-          setMutatingBlock: () => {
-            setRenameAgentBlock((current) => {
-              if (!current || current.agentId !== agentId) return current;
-              return { ...current, phase: "renaming" };
-            });
-          },
-          patchBlockAwaitingRestart: (patch) => {
-            setRenameAgentBlock((current) => {
-              if (!current || current.agentId !== agentId) return current;
-              return {
-                ...current,
-                ...patch,
-              };
-            });
-          },
-          clearBlock: () => {
-            setRenameAgentBlock(null);
-          },
-          executeMutation: async () => {
-            await renameGatewayAgent({
-              client,
-              agentId,
-              name,
-            });
-            dispatch({
-              type: "updateAgent",
-              agentId,
-              patch: { name },
-            });
-          },
-          shouldAwaitRemoteRestart: async () =>
-            shouldAwaitDisconnectRestartForRemoteMutation({
-              client,
-              cachedConfigSnapshot: gatewayConfigSnapshot,
-              logError: (message, error) => console.error(message, error),
-            }),
-          reloadAgents: loadAgents,
-          setMobilePaneChat: () => {
-            setMobilePane("chat");
-          },
-          onError: (message) => {
-            setError(message);
-          },
+        executeMutation: async () => {
+          await renameGatewayAgent({
+            client,
+            agentId,
+            name,
+          });
+          dispatch({
+            type: "updateAgent",
+            agentId,
+            patch: { name },
+          });
         },
       });
     },
@@ -2143,14 +2089,10 @@ const AgentStudioPage = () => {
       agents,
       client,
       createAgentBlock,
-      deleteAgentBlock,
       dispatch,
-      enqueueConfigMutation,
-      gatewayConfigSnapshot,
-      isLocalGateway,
-      loadAgents,
-      renameAgentBlock,
-      setError,
+      hasDeleteMutationBlock,
+      hasRenameMutationBlock,
+      runRestartingMutationLifecycle,
     ]
   );
 
@@ -2159,8 +2101,8 @@ const AgentStudioPage = () => {
       const guard = resolveMutationStartGuard({
         status: "connected",
         hasCreateBlock: Boolean(createAgentBlock),
-        hasRenameBlock: Boolean(renameAgentBlock),
-        hasDeleteBlock: Boolean(deleteAgentBlock),
+        hasRenameBlock: hasRenameMutationBlock,
+        hasDeleteBlock: hasDeleteMutationBlock,
       });
       if (guard.kind === "deny") return;
 
@@ -2191,11 +2133,11 @@ const AgentStudioPage = () => {
       agents,
       client,
       createAgentBlock,
-      deleteAgentBlock,
       enqueueConfigMutation,
+      hasDeleteMutationBlock,
+      hasRenameMutationBlock,
       loadAgents,
       refreshGatewayConfigSnapshot,
-      renameAgentBlock,
     ]
   );
 
@@ -2253,24 +2195,30 @@ const AgentStudioPage = () => {
       ? "Submitting config change"
       : null
     : null;
-  const renameBlockStatusLine = resolveConfigMutationStatusLine({
-    block: renameAgentBlock
+  const restartingMutationStatusLine = resolveConfigMutationStatusLine({
+    block: restartingMutationBlock
       ? {
-          phase: renameAgentBlock.phase === "renaming" ? "mutating" : renameAgentBlock.phase,
-          sawDisconnect: renameAgentBlock.sawDisconnect,
+          phase: restartingMutationBlock.phase,
+          sawDisconnect: restartingMutationBlock.sawDisconnect,
         }
       : null,
     status,
   });
-  const deleteBlockStatusLine = resolveConfigMutationStatusLine({
-    block: deleteAgentBlock
-      ? {
-          phase: deleteAgentBlock.phase === "deleting" ? "mutating" : deleteAgentBlock.phase,
-          sawDisconnect: deleteAgentBlock.sawDisconnect,
-        }
-      : null,
-    status,
-  });
+  const restartingMutationModalTestId = restartingMutationBlock
+    ? restartingMutationBlock.kind === "delete-agent"
+      ? "agent-delete-restart-modal"
+      : "agent-rename-restart-modal"
+    : null;
+  const restartingMutationAriaLabel = restartingMutationBlock
+    ? restartingMutationBlock.kind === "delete-agent"
+      ? "Deleting agent and restarting gateway"
+      : "Renaming agent and restarting gateway"
+    : null;
+  const restartingMutationHeading = restartingMutationBlock
+    ? restartingMutationBlock.kind === "delete-agent"
+      ? "Agent delete in progress"
+      : "Agent rename in progress"
+    : null;
 
   useEffect(() => {
     if (status === "connecting") {
@@ -2613,53 +2561,27 @@ const AgentStudioPage = () => {
           </div>
         </div>
       ) : null}
-      {renameAgentBlock && renameAgentBlock.phase !== "queued" ? (
+      {restartingMutationBlock && restartingMutationBlock.phase !== "queued" ? (
         <div
           className="fixed inset-0 z-[100] flex items-center justify-center bg-background/80"
-          data-testid="agent-rename-restart-modal"
+          data-testid={restartingMutationModalTestId ?? undefined}
           role="dialog"
           aria-modal="true"
-          aria-label="Renaming agent and restarting gateway"
+          aria-label={restartingMutationAriaLabel ?? undefined}
         >
           <div className="ui-panel w-full max-w-md p-6">
             <div className="font-mono text-[10px] font-semibold tracking-[0.06em] text-muted-foreground">
-              Agent rename in progress
+              {restartingMutationHeading}
             </div>
             <div className="mt-2 text-base font-semibold text-foreground">
-              {renameAgentBlock.agentName}
+              {restartingMutationBlock.agentName}
             </div>
             <div className="mt-3 text-sm text-muted-foreground">
               Studio is temporarily locked until the gateway restarts.
             </div>
-            {renameBlockStatusLine ? (
+            {restartingMutationStatusLine ? (
               <div className="ui-card mt-4 px-3 py-2 font-mono text-[11px] tracking-[0.06em] text-foreground">
-                {renameBlockStatusLine}
-              </div>
-            ) : null}
-          </div>
-        </div>
-      ) : null}
-      {deleteAgentBlock && deleteAgentBlock.phase !== "queued" ? (
-        <div
-          className="fixed inset-0 z-[100] flex items-center justify-center bg-background/80"
-          data-testid="agent-delete-restart-modal"
-          role="dialog"
-          aria-modal="true"
-          aria-label="Deleting agent and restarting gateway"
-        >
-          <div className="ui-panel w-full max-w-md p-6">
-            <div className="font-mono text-[10px] font-semibold tracking-[0.06em] text-muted-foreground">
-              Agent delete in progress
-            </div>
-            <div className="mt-2 text-base font-semibold text-foreground">
-              {deleteAgentBlock.agentName}
-            </div>
-            <div className="mt-3 text-sm text-muted-foreground">
-              Studio is temporarily locked until the gateway restarts.
-            </div>
-            {deleteBlockStatusLine ? (
-              <div className="ui-card mt-4 px-3 py-2 font-mono text-[11px] tracking-[0.06em] text-foreground">
-                {deleteBlockStatusLine}
+                {restartingMutationStatusLine}
               </div>
             ) : null}
           </div>

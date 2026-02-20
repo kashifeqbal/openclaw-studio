@@ -1,11 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 
 import type { AgentCreateModalSubmitPayload } from "@/features/agents/creation/types";
-import type { CreateAgentMutationLifecycleDeps } from "@/features/agents/operations/createAgentMutationLifecycleOperation";
+import type { CreateAgentMutationLifecycleDeps } from "@/features/agents/operations/mutationLifecycleWorkflow";
 import {
   isCreateBlockTimedOut,
   runCreateAgentMutationLifecycle,
-} from "@/features/agents/operations/createAgentMutationLifecycleOperation";
+} from "@/features/agents/operations/mutationLifecycleWorkflow";
 
 const createPayload = (
   overrides: Partial<AgentCreateModalSubmitPayload> = {}
@@ -32,7 +32,7 @@ const createDeps = (
   ...overrides,
 });
 
-describe("createAgentMutationLifecycleOperation", () => {
+describe("mutationLifecycleWorkflow create lifecycle", () => {
   it("blocks create and sets modal error when disconnected", async () => {
     const setCreateAgentModalError = vi.fn();
     const enqueueConfigMutation = vi.fn(async () => undefined);

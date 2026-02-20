@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { runAgentConfigMutationLifecycle } from "@/features/agents/operations/agentConfigMutationLifecycleOperation";
+import { runAgentConfigMutationLifecycle } from "@/features/agents/operations/mutationLifecycleWorkflow";
 
-describe("agentConfigMutationLifecycleOperation", () => {
+describe("mutationLifecycleWorkflow lifecycle runner", () => {
   it("runs completed rename lifecycle commands in order", async () => {
     const order: string[] = [];
     const enqueueConfigMutation = vi.fn(async ({ run }: { run: () => Promise<void> }) => {
