@@ -16,7 +16,6 @@ import {
   type AgentPermissionsDraft,
 } from "@/features/agents/operations/agentPermissionsOperation";
 import {
-  AGENT_FILE_META,
   AGENT_FILE_NAMES,
   AGENT_FILE_PLACEHOLDERS,
   PERSONALITY_FILE_LABELS,
@@ -33,30 +32,51 @@ const AgentInspectHeader = ({
   closeTestId,
   closeDisabled,
 }: {
-  label: string;
-  title: string;
+  label?: string;
+  title?: string;
   onClose: () => void;
   closeTestId: string;
   closeDisabled?: boolean;
 }) => {
-  const hasLabel = label.trim().length > 0;
+  const normalizedLabel = label?.trim() ?? "";
+  const normalizedTitle = title?.trim() ?? "";
+  const hasLabel = normalizedLabel.length > 0;
+  const hasTitle = normalizedTitle.length > 0;
+  if (!hasLabel && !hasTitle) {
+    return (
+      <div className="flex justify-end px-2 pt-1">
+        <button
+          className="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground/55 transition hover:bg-surface-2 hover:text-muted-foreground/85"
+          type="button"
+          data-testid={closeTestId}
+          aria-label="Close panel"
+          disabled={closeDisabled}
+          onClick={onClose}
+        >
+          <X className="h-4 w-4" aria-hidden="true" />
+        </button>
+      </div>
+    );
+  }
   return (
     <div className="flex items-center justify-between pl-4 pr-2 pb-3 pt-2">
       <div>
         {hasLabel ? (
           <div className="font-mono text-[9px] font-medium tracking-[0.04em] text-muted-foreground/58">
-            {label}
+            {normalizedLabel}
           </div>
         ) : null}
-        <div
-          className={
-            hasLabel
-              ? "text-[1.45rem] font-semibold leading-[1.05] tracking-[0.01em] text-foreground"
-              : "font-mono text-[12px] font-semibold tracking-[0.05em] text-foreground"
-          }
-        >
-          {title}
-        </div>
+        {hasTitle ? (
+          <div
+            className={
+              hasLabel
+                ? "text-[1.45rem] font-semibold leading-[1.05] tracking-[0.01em] text-foreground"
+                : "font-mono text-[12px] font-semibold tracking-[0.05em] text-foreground"
+            }
+          >
+            {normalizedTitle}
+          </div>
+        ) : null}
       </div>
       <button
         className="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground/55 transition hover:bg-surface-2 hover:text-muted-foreground/85"
@@ -1339,7 +1359,7 @@ export const AgentBrainPanel = ({
     >
       <AgentInspectHeader
         label=""
-        title={selectedAgent?.name ?? "No agent selected"}
+        title=""
         onClose={() => {
           void handleClose();
         }}
@@ -1347,20 +1367,15 @@ export const AgentBrainPanel = ({
         closeDisabled={agentFilesSaving}
       />
 
-      <div className="flex min-h-0 flex-1 flex-col p-4">
+      <div className="flex min-h-0 flex-1 flex-col p-4 pt-2">
         <section className="flex min-h-0 flex-1 flex-col" data-testid="agent-personality-files">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div className="font-mono text-[10px] font-semibold tracking-[0.06em] text-muted-foreground">
-              {AGENT_FILE_META[agentFileTab].hint}
-            </div>
-          </div>
           {agentFilesError ? (
-            <div className="ui-alert-danger mt-3 rounded-md px-3 py-2 text-xs">
+            <div className="ui-alert-danger mt-2 rounded-md px-3 py-2 text-xs">
               {agentFilesError}
             </div>
           ) : null}
 
-          <div className="ui-segment mt-4 grid grid-cols-3 sm:grid-cols-4">
+          <div className="ui-segment mt-2 grid grid-cols-3 sm:grid-cols-4">
             {PERSONALITY_FILE_NAMES.map((name) => {
               const active = name === agentFileTab;
               return (
