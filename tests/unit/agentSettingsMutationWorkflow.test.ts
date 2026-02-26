@@ -32,6 +32,10 @@ describe("agentSettingsMutationWorkflow", () => {
       { kind: "install-skill", agentId: "agent-1", skillKey: "browser" },
       createContext({ status: "disconnected" })
     );
+    const removeResult = planAgentSettingsMutation(
+      { kind: "remove-skill", agentId: "agent-1", skillKey: "browser" },
+      createContext({ status: "disconnected" })
+    );
 
     expect(renameResult).toEqual({
       kind: "deny",
@@ -46,6 +50,12 @@ describe("agentSettingsMutationWorkflow", () => {
       guardReason: "not-connected",
     });
     expect(installResult).toEqual({
+      kind: "deny",
+      reason: "start-guard-deny",
+      message: null,
+      guardReason: "not-connected",
+    });
+    expect(removeResult).toEqual({
       kind: "deny",
       reason: "start-guard-deny",
       message: null,
@@ -136,6 +146,10 @@ describe("agentSettingsMutationWorkflow", () => {
       { kind: "save-skill-api-key", agentId: "agent-1", skillKey: "  " },
       createContext()
     );
+    const removeResult = planAgentSettingsMutation(
+      { kind: "remove-skill", agentId: "agent-1", skillKey: "  " },
+      createContext()
+    );
 
     expect(installResult).toEqual({
       kind: "deny",
@@ -143,6 +157,11 @@ describe("agentSettingsMutationWorkflow", () => {
       message: null,
     });
     expect(saveResult).toEqual({
+      kind: "deny",
+      reason: "missing-skill-key",
+      message: null,
+    });
+    expect(removeResult).toEqual({
       kind: "deny",
       reason: "missing-skill-key",
       message: null,

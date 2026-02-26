@@ -1,4 +1,8 @@
-import type { SkillInstallOption, SkillStatusEntry } from "@/lib/skills/types";
+import type {
+  RemovableSkillSource,
+  SkillInstallOption,
+  SkillStatusEntry,
+} from "@/lib/skills/types";
 
 export type SkillSourceGroupId = "workspace" | "built-in" | "installed" | "extra" | "other";
 
@@ -16,6 +20,10 @@ const GROUP_DEFINITIONS: Array<{ id: Exclude<SkillSourceGroupId, "other">; label
 ];
 
 const WORKSPACE_SOURCES = new Set(["openclaw-workspace", "agents-skills-personal", "agents-skills-project"]);
+const REMOVABLE_SOURCES = new Set<RemovableSkillSource>([
+  "openclaw-managed",
+  "openclaw-workspace",
+]);
 
 const trimNonEmpty = (value: string): string | null => {
   const trimmed = value.trim();
@@ -70,6 +78,18 @@ export const groupSkillsBySource = (skills: SkillStatusEntry[]): SkillSourceGrou
     ordered.push(other);
   }
   return ordered;
+};
+
+export const canRemoveSkillSource = (source: string): source is RemovableSkillSource => {
+  const trimmed = trimNonEmpty(source);
+  if (!trimmed) {
+    return false;
+  }
+  return REMOVABLE_SOURCES.has(trimmed as RemovableSkillSource);
+};
+
+export const canRemoveSkill = (skill: SkillStatusEntry): boolean => {
+  return canRemoveSkillSource(skill.source);
 };
 
 export const buildSkillMissingDetails = (skill: SkillStatusEntry): string[] => {

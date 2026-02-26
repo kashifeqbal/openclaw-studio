@@ -13,6 +13,7 @@ type GuardedActionKind =
   | "disable-all-skills"
   | "set-skill-enabled"
   | "install-skill"
+  | "remove-skill"
   | "save-skill-api-key";
 type CronActionKind = "run-cron-job" | "delete-cron-job";
 
@@ -65,6 +66,7 @@ const isGuardedAction = (
   kind === "disable-all-skills" ||
   kind === "set-skill-enabled" ||
   kind === "install-skill" ||
+  kind === "remove-skill" ||
   kind === "save-skill-api-key";
 
 const isCronActionBusy = (context: AgentSettingsMutationContext) =>
@@ -146,7 +148,11 @@ export const planAgentSettingsMutation = (
     }
   }
 
-  if (request.kind === "install-skill" || request.kind === "save-skill-api-key") {
+  if (
+    request.kind === "install-skill" ||
+    request.kind === "remove-skill" ||
+    request.kind === "save-skill-api-key"
+  ) {
     const normalizedSkillKey = normalizeId(request.skillKey ?? "");
     if (!normalizedSkillKey) {
       return {

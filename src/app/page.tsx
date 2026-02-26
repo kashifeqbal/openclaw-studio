@@ -1518,6 +1518,12 @@ const AgentStudioPage = () => {
                                 installId
                               )
                             }
+                            onRemoveSkill={(skill) =>
+                              settingsMutationController.handleRemoveSkill(
+                                inspectSidebarAgent.agentId,
+                                skill
+                              )
+                            }
                             onSkillApiKeyChange={(skillKey, value) =>
                               settingsMutationController.handleSkillApiKeyDraftChange(skillKey, value)
                             }

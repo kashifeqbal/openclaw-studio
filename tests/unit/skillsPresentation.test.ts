@@ -4,6 +4,7 @@ import type { SkillStatusEntry } from "@/lib/skills/types";
 import {
   buildSkillMissingDetails,
   buildSkillReasons,
+  canRemoveSkill,
   groupSkillsBySource,
   hasInstallableMissingBinary,
   isBundledBlockedSkill,
@@ -156,5 +157,16 @@ describe("skills presentation helpers", () => {
     });
 
     expect(resolvePreferredInstallOption(skill)?.id).toBe("install-gh");
+  });
+
+  it("marks only gateway-managed and workspace skill sources as removable", () => {
+    expect(canRemoveSkill(createSkill({ source: "openclaw-managed" }))).toBe(true);
+    expect(canRemoveSkill(createSkill({ source: "openclaw-workspace" }))).toBe(true);
+    expect(canRemoveSkill(createSkill({ source: "agents-skills-personal" }))).toBe(false);
+    expect(canRemoveSkill(createSkill({ source: "agents-skills-project" }))).toBe(false);
+    expect(canRemoveSkill(createSkill({ source: "openclaw-bundled", bundled: true }))).toBe(
+      false
+    );
+    expect(canRemoveSkill(createSkill({ source: "openclaw-extra" }))).toBe(false);
   });
 });
