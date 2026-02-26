@@ -22,6 +22,7 @@ import type { SkillStatusReport } from "@/lib/skills/types";
 import {
   buildSkillMissingDetails,
   buildSkillReasons,
+  canRemoveSkill,
   groupSkillsBySource,
   isBundledBlockedSkill,
   resolvePreferredInstallOption,
@@ -128,6 +129,9 @@ type AgentSettingsPanelProps = {
   onDisableAllSkills?: () => Promise<void> | void;
   onSetSkillEnabled?: (skillName: string, enabled: boolean) => Promise<void> | void;
   onInstallSkill?: (skillKey: string, name: string, installId: string) => Promise<void> | void;
+  onRemoveSkill?: (
+    skill: { skillKey: string; source: string; baseDir: string }
+  ) => Promise<void> | void;
   onSkillApiKeyChange?: (skillKey: string, value: string) => Promise<void> | void;
   onSaveSkillApiKey?: (skillKey: string) => Promise<void> | void;
 };
@@ -326,6 +330,7 @@ export const AgentSettingsPanel = ({
   onDisableAllSkills = () => {},
   onSetSkillEnabled = () => {},
   onInstallSkill = () => {},
+  onRemoveSkill = () => {},
   onSkillApiKeyChange = () => {},
   onSaveSkillApiKey = () => {},
 }: AgentSettingsPanelProps) => {
@@ -349,6 +354,12 @@ export const AgentSettingsPanel = ({
   const [cronDraft, setCronDraft] = useState<CronCreateDraft>(createInitialCronDraft);
   const [skillsFilter, setSkillsFilter] = useState("");
   const [hideBundledBlockedSkills, setHideBundledBlockedSkills] = useState(true);
+  const [pendingSkillRemoval, setPendingSkillRemoval] = useState<{
+    skillKey: string;
+    name: string;
+    source: string;
+    baseDir: string;
+  } | null>(null);
 
   const resolvedExecutionRole = useMemo(() => resolveExecutionRoleFromAgent(agent), [agent]);
   const resolvedPermissionsDraft = useMemo(
@@ -420,6 +431,7 @@ export const AgentSettingsPanel = ({
   useEffect(() => {
     setSkillsFilter("");
     setHideBundledBlockedSkills(true);
+    setPendingSkillRemoval(null);
   }, [agent.agentId]);
 
   const openCronCreate = () => {
@@ -816,6 +828,7 @@ export const AgentSettingsPanel = ({
                           const busyForSkill = skillsBusyKey === skill.skillKey;
                           const anySkillBusy = skillsBusy || Boolean(skillsBusyKey);
                           const installOption = resolvePreferredInstallOption(skill);
+                          const canDeleteSkill = canRemoveSkill(skill);
                           const apiKeyDraft = skillApiKeyDrafts[skill.skillKey] ?? "";
                           const hasApiKeyDraft = apiKeyDraft.trim().length > 0;
 
@@ -874,19 +887,39 @@ export const AgentSettingsPanel = ({
                                 ) : null}
                               </div>
                               <div className="flex w-full flex-col items-stretch gap-2 sm:w-[240px]">
-                                <button
-                                  type="button"
-                                  role="switch"
-                                  aria-label={`Skill ${skill.name}`}
-                                  aria-checked={enabled}
-                                  className={`ui-switch self-start ${enabled ? "ui-switch--on" : ""}`}
-                                  disabled={anySkillBusy}
-                                  onClick={() => {
-                                    void onSetSkillEnabled(skill.name, !enabled);
-                                  }}
-                                >
-                                  <span className="ui-switch-thumb" />
-                                </button>
+                                <div className="flex items-center justify-between gap-2">
+                                  <button
+                                    type="button"
+                                    role="switch"
+                                    aria-label={`Skill ${skill.name}`}
+                                    aria-checked={enabled}
+                                    className={`ui-switch self-start ${enabled ? "ui-switch--on" : ""}`}
+                                    disabled={anySkillBusy}
+                                    onClick={() => {
+                                      void onSetSkillEnabled(skill.name, !enabled);
+                                    }}
+                                  >
+                                    <span className="ui-switch-thumb" />
+                                  </button>
+                                  {canDeleteSkill ? (
+                                    <button
+                                      type="button"
+                                      aria-label={`Remove skill ${skill.name}`}
+                                      className="ui-btn-icon ui-btn-icon-danger h-7 w-7 bg-transparent disabled:cursor-not-allowed disabled:opacity-60"
+                                      disabled={anySkillBusy}
+                                      onClick={() => {
+                                        setPendingSkillRemoval({
+                                          skillKey: skill.skillKey,
+                                          name: skill.name,
+                                          source: skill.source,
+                                          baseDir: skill.baseDir,
+                                        });
+                                      }}
+                                    >
+                                      <Trash2 className="h-3.5 w-3.5" />
+                                    </button>
+                                  ) : null}
+                                </div>
                                 {installOption ? (
                                   <button
                                     type="button"
@@ -1158,6 +1191,82 @@ export const AgentSettingsPanel = ({
           </>
         ) : null}
       </div>
+      {pendingSkillRemoval ? (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-background/80 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-label={`Remove skill ${pendingSkillRemoval.name}`}
+          onClick={() => {
+            setPendingSkillRemoval(null);
+          }}
+        >
+          <div
+            className="ui-panel w-full max-w-xl bg-card shadow-xs"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-3 px-6 py-5">
+              <div className="min-w-0">
+                <div className="text-[11px] font-medium tracking-[0.01em] text-muted-foreground/80">
+                  Remove skill files
+                </div>
+                <div className="mt-1 text-base font-semibold text-foreground">
+                  Remove {pendingSkillRemoval.name} from the gateway?
+                </div>
+              </div>
+              <button
+                type="button"
+                className="sidebar-btn-ghost px-3 font-mono text-[10px] font-semibold tracking-[0.06em]"
+                onClick={() => {
+                  setPendingSkillRemoval(null);
+                }}
+              >
+                Close
+              </button>
+            </div>
+            <div className="space-y-3 px-6 pb-3 text-[11px] text-muted-foreground">
+              <div>
+                This permanently removes this skill directory on the gateway host. This action cannot
+                be undone.
+              </div>
+              <div className="rounded-md border border-border/60 bg-surface-1/65 px-3 py-3 font-mono text-[10px] text-foreground/85">
+                <div>Source: {pendingSkillRemoval.source}</div>
+                <div className="mt-1 break-all">Path: {pendingSkillRemoval.baseDir}</div>
+              </div>
+            </div>
+            <div className="flex items-center justify-end gap-2 px-6 pb-5 pt-2">
+              <button
+                type="button"
+                className="ui-btn-secondary px-3 py-2 text-[10px] font-medium"
+                onClick={() => {
+                  setPendingSkillRemoval(null);
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="ui-btn-secondary ui-btn-danger px-3 py-2 text-[10px] font-medium disabled:cursor-not-allowed disabled:opacity-65"
+                disabled={skillsBusy || Boolean(skillsBusyKey)}
+                onClick={() => {
+                  const target = pendingSkillRemoval;
+                  setPendingSkillRemoval(null);
+                  if (!target) {
+                    return;
+                  }
+                  void onRemoveSkill({
+                    skillKey: target.skillKey,
+                    source: target.source,
+                    baseDir: target.baseDir,
+                  });
+                }}
+              >
+                Remove skill
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
       {cronCreateOpen ? (
         <div
           className="fixed inset-0 z-[100] flex items-center justify-center bg-background/80 p-4"

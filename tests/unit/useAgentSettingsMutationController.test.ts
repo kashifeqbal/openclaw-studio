@@ -18,6 +18,7 @@ import {
   readGatewayAgentSkillsAllowlist,
   updateGatewayAgentSkillsAllowlist,
 } from "@/lib/gateway/agentConfig";
+import { removeSkillFromGateway } from "@/lib/skills/remove";
 import { installSkill, loadAgentSkillStatus, updateSkill } from "@/lib/skills/types";
 
 let restartBlockHookParams:
@@ -121,6 +122,14 @@ vi.mock("@/lib/skills/types", () => ({
   })),
 }));
 
+vi.mock("@/lib/skills/remove", () => ({
+  removeSkillFromGateway: vi.fn(async () => ({
+    removed: true,
+    removedPath: "/tmp/workspace/skills/browser",
+    source: "openclaw-workspace",
+  })),
+}));
+
 type ControllerValue = ReturnType<typeof useAgentSettingsMutationController>;
 
 const draft: AgentPermissionsDraft = {
@@ -221,6 +230,7 @@ describe("useAgentSettingsMutationController", () => {
   const mockedUpdateGatewayAgentSkillsAllowlist = vi.mocked(updateGatewayAgentSkillsAllowlist);
   const mockedLoadAgentSkillStatus = vi.mocked(loadAgentSkillStatus);
   const mockedInstallSkill = vi.mocked(installSkill);
+  const mockedRemoveSkillFromGateway = vi.mocked(removeSkillFromGateway);
   const mockedUpdateSkill = vi.mocked(updateSkill);
 
   beforeEach(() => {
@@ -236,6 +246,7 @@ describe("useAgentSettingsMutationController", () => {
     mockedUpdateGatewayAgentSkillsAllowlist.mockReset();
     mockedLoadAgentSkillStatus.mockReset();
     mockedInstallSkill.mockReset();
+    mockedRemoveSkillFromGateway.mockReset();
     mockedUpdateSkill.mockReset();
     mockedShouldAwaitRemoteRestart.mockResolvedValue(false);
     mockedReadGatewayAgentSkillsAllowlist.mockResolvedValue(undefined);
@@ -251,6 +262,11 @@ describe("useAgentSettingsMutationController", () => {
       stdout: "",
       stderr: "",
       code: 0,
+    });
+    mockedRemoveSkillFromGateway.mockResolvedValue({
+      removed: true,
+      removedPath: "/tmp/workspace/skills/browser",
+      source: "openclaw-workspace",
     });
     mockedUpdateSkill.mockResolvedValue({
       ok: true,
@@ -512,6 +528,65 @@ describe("useAgentSettingsMutationController", () => {
       message: "Installed",
     });
     expect(mockedLoadAgentSkillStatus).toHaveBeenCalledTimes(2);
+  });
+
+  it("removes_skill_files_with_per_skill_busy_and_message_state", async () => {
+    mockedLoadAgentSkillStatus.mockResolvedValue({
+      workspaceDir: "/tmp/workspace",
+      managedSkillsDir: "/tmp/skills",
+      skills: [
+        {
+          name: "browser",
+          description: "",
+          source: "openclaw-workspace",
+          bundled: false,
+          filePath: "/tmp/workspace/skills/browser/SKILL.md",
+          baseDir: "/tmp/workspace/skills/browser",
+          skillKey: "browser",
+          always: false,
+          disabled: false,
+          blockedByAllowlist: false,
+          eligible: true,
+          requirements: { bins: [], anyBins: [], env: [], config: [], os: [] },
+          missing: { bins: [], anyBins: [], env: [], config: [], os: [] },
+          configChecks: [],
+          install: [],
+        },
+      ],
+    });
+    const ctx = renderController({
+      settingsRouteActive: true,
+      inspectSidebarAgentId: "agent-1",
+      inspectSidebarTab: "skills",
+    });
+
+    await waitFor(() => {
+      expect(mockedLoadAgentSkillStatus).toHaveBeenCalledTimes(1);
+    });
+
+    await act(async () => {
+      await ctx.getValue().handleRemoveSkill("agent-1", {
+        skillKey: "browser",
+        source: "openclaw-workspace",
+        baseDir: "/tmp/workspace/skills/browser",
+      });
+    });
+
+    expect(mockedRemoveSkillFromGateway).toHaveBeenCalledWith({
+      skillKey: "browser",
+      source: "openclaw-workspace",
+      baseDir: "/tmp/workspace/skills/browser",
+      workspaceDir: "/tmp/workspace",
+      managedSkillsDir: "/tmp/skills",
+    });
+    expect(ctx.enqueueConfigMutation).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: "update-skill-setup" })
+    );
+    expect(ctx.getValue().settingsSkillsBusyKey).toBeNull();
+    expect(ctx.getValue().settingsSkillMessages.browser).toEqual({
+      kind: "success",
+      message: "Skill removed from gateway files",
+    });
   });
 
   it("saves_skill_api_key_via_config_queue_and_refreshes_skills", async () => {

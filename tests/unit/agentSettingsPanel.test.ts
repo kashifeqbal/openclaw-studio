@@ -63,8 +63,8 @@ const createSkillsReport = (): SkillStatusReport => ({
       description: "GitHub integration",
       source: "openclaw-workspace",
       bundled: false,
-      filePath: "/tmp/skills/github/SKILL.md",
-      baseDir: "/tmp/skills/github",
+      filePath: "/tmp/workspace/skills/github/SKILL.md",
+      baseDir: "/tmp/workspace/skills/github",
       skillKey: "github",
       always: false,
       disabled: false,
@@ -562,6 +562,41 @@ describe("AgentSettingsPanel", () => {
     expect(onInstallSkill).toHaveBeenCalledWith("browser", "browser", "install-playwright");
     expect(onSkillApiKeyChange).toHaveBeenCalledWith("browser", "test-key");
     expect(onSaveSkillApiKey).toHaveBeenCalledWith("browser");
+  });
+
+  it("prompts_before_removing_skill_files_and_confirms_action", () => {
+    const onRemoveSkill = vi.fn();
+    render(
+      createElement(AgentSettingsPanel, {
+        agent: createAgent(),
+        mode: "skills",
+        onClose: vi.fn(),
+        onDelete: vi.fn(),
+        onToolCallingToggle: vi.fn(),
+        onThinkingTracesToggle: vi.fn(),
+        cronJobs: [],
+        cronLoading: false,
+        cronError: null,
+        cronRunBusyJobId: null,
+        cronDeleteBusyJobId: null,
+        onRunCronJob: vi.fn(),
+        onDeleteCronJob: vi.fn(),
+        skillsReport: createSkillsReport(),
+        onRemoveSkill,
+      })
+    );
+
+    fireEvent.click(screen.getByText("Workspace Skills"));
+    fireEvent.click(screen.getByRole("button", { name: "Remove skill github" }));
+
+    expect(screen.getByRole("dialog", { name: "Remove skill github" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Remove skill" }));
+
+    expect(onRemoveSkill).toHaveBeenCalledWith({
+      skillKey: "github",
+      source: "openclaw-workspace",
+      baseDir: "/tmp/workspace/skills/github",
+    });
   });
 
   it("disables_api_key_save_when_input_is_blank", () => {

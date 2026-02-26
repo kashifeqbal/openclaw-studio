@@ -20,6 +20,8 @@ export type SkillInstallOption = {
   bins: string[];
 };
 
+export type RemovableSkillSource = "openclaw-managed" | "openclaw-workspace";
+
 export type SkillStatusEntry = {
   name: string;
   description: string;
@@ -72,6 +74,20 @@ export type SkillUpdateResult = {
   ok: boolean;
   skillKey: string;
   config: Record<string, unknown>;
+};
+
+export type SkillRemoveRequest = {
+  skillKey: string;
+  source: RemovableSkillSource;
+  baseDir: string;
+  workspaceDir: string;
+  managedSkillsDir: string;
+};
+
+export type SkillRemoveResult = {
+  removed: boolean;
+  removedPath: string;
+  source: RemovableSkillSource;
 };
 
 const resolveAgentId = (agentId: string): string => {

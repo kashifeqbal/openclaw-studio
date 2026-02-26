@@ -35,10 +35,13 @@ import {
   updateGatewayAgentSkillsAllowlist,
 } from "@/lib/gateway/agentConfig";
 import { fetchJson } from "@/lib/http";
+import { canRemoveSkillSource } from "@/lib/skills/presentation";
+import { removeSkillFromGateway } from "@/lib/skills/remove";
 import {
   installSkill,
   loadAgentSkillStatus,
   updateSkill,
+  type SkillStatusEntry,
   type SkillStatusReport,
 } from "@/lib/skills/types";
 
@@ -791,7 +794,7 @@ export function useAgentSettingsMutationController(params: UseAgentSettingsMutat
   const runSkillSetupMutation = useCallback(
     async (input: {
       agentId: string;
-      decisionKind: "install-skill" | "save-skill-api-key";
+      decisionKind: "install-skill" | "remove-skill" | "save-skill-api-key";
       skillKey: string;
       label: string;
       run: () => Promise<{ successMessage: string }>;
@@ -871,6 +874,62 @@ export function useAgentSettingsMutationController(params: UseAgentSettingsMutat
     [SKILL_INSTALL_TIMEOUT_MS, params.client, runSkillSetupMutation]
   );
 
+  const handleRemoveSkill = useCallback(
+    async (
+      agentId: string,
+      skill: Pick<SkillStatusEntry, "skillKey" | "source" | "baseDir">
+    ) => {
+      const report = settingsSkillsReport;
+      const normalizedSkillKey = skill.skillKey.trim();
+      if (!normalizedSkillKey) {
+        const message = "Skill key is required to remove the skill.";
+        setSettingsSkillsError(message);
+        return;
+      }
+      if (!report) {
+        const message = "Cannot remove skill: skills are not loaded.";
+        setSettingsSkillsError(message);
+        setSkillMessage(normalizedSkillKey, {
+          kind: "error",
+          message,
+        });
+        return;
+      }
+      const normalizedSource = skill.source.trim();
+      if (!canRemoveSkillSource(normalizedSource)) {
+        const message = `Skill source cannot be removed from Studio: ${normalizedSource || "unknown"}.`;
+        setSettingsSkillsError(message);
+        setSkillMessage(normalizedSkillKey, {
+          kind: "error",
+          message,
+        });
+        return;
+      }
+
+      await runSkillSetupMutation({
+        agentId,
+        decisionKind: "remove-skill",
+        skillKey: normalizedSkillKey,
+        label: `Remove ${normalizedSkillKey}`,
+        run: async () => {
+          const result = await removeSkillFromGateway({
+            skillKey: normalizedSkillKey,
+            source: normalizedSource,
+            baseDir: skill.baseDir,
+            workspaceDir: report.workspaceDir,
+            managedSkillsDir: report.managedSkillsDir,
+          });
+          return {
+            successMessage: result.removed
+              ? "Skill removed from gateway files"
+              : "Skill files were already removed",
+          };
+        },
+      });
+    },
+    [runSkillSetupMutation, setSkillMessage, settingsSkillsReport]
+  );
+
   const handleSaveSkillApiKey = useCallback(
     async (agentId: string, skillKey: string) => {
       const normalizedSkillKey = skillKey.trim();
@@ -932,6 +991,7 @@ export function useAgentSettingsMutationController(params: UseAgentSettingsMutat
     handleDisableAllSkills,
     handleSetSkillEnabled,
     handleInstallSkill,
+    handleRemoveSkill,
     handleSkillApiKeyDraftChange,
     handleSaveSkillApiKey,
   };
