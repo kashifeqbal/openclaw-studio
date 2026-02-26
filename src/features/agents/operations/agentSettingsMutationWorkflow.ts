@@ -11,11 +11,13 @@ type GuardedActionKind =
   | "update-agent-permissions"
   | "use-all-skills"
   | "disable-all-skills"
-  | "set-skill-enabled";
+  | "set-skill-enabled"
+  | "install-skill"
+  | "save-skill-api-key";
 type CronActionKind = "run-cron-job" | "delete-cron-job";
 
 export type AgentSettingsMutationRequest =
-  | { kind: GuardedActionKind; agentId: string; skillName?: string }
+  | { kind: GuardedActionKind; agentId: string; skillName?: string; skillKey?: string }
   | { kind: "create-cron-job"; agentId: string }
   | { kind: CronActionKind; agentId: string; jobId: string };
 
@@ -35,7 +37,8 @@ export type AgentSettingsMutationDenyReason =
   | "cron-action-busy"
   | "missing-agent-id"
   | "missing-job-id"
-  | "missing-skill-name";
+  | "missing-skill-name"
+  | "missing-skill-key";
 
 export type AgentSettingsMutationDecision =
   | {
@@ -60,7 +63,9 @@ const isGuardedAction = (
   kind === "update-agent-permissions" ||
   kind === "use-all-skills" ||
   kind === "disable-all-skills" ||
-  kind === "set-skill-enabled";
+  kind === "set-skill-enabled" ||
+  kind === "install-skill" ||
+  kind === "save-skill-api-key";
 
 const isCronActionBusy = (context: AgentSettingsMutationContext) =>
   context.cronCreateBusy ||
@@ -136,6 +141,17 @@ export const planAgentSettingsMutation = (
       return {
         kind: "deny",
         reason: "missing-skill-name",
+        message: null,
+      };
+    }
+  }
+
+  if (request.kind === "install-skill" || request.kind === "save-skill-api-key") {
+    const normalizedSkillKey = normalizeId(request.skillKey ?? "");
+    if (!normalizedSkillKey) {
+      return {
+        kind: "deny",
+        reason: "missing-skill-key",
         message: null,
       };
     }

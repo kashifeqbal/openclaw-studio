@@ -5,6 +5,14 @@ export type SkillStatusConfigCheck = {
   satisfied: boolean;
 };
 
+export type SkillRequirementSet = {
+  bins: string[];
+  anyBins: string[];
+  env: string[];
+  config: string[];
+  os: string[];
+};
+
 export type SkillInstallOption = {
   id: string;
   kind: "brew" | "node" | "go" | "uv" | "download";
@@ -27,18 +35,8 @@ export type SkillStatusEntry = {
   disabled: boolean;
   blockedByAllowlist: boolean;
   eligible: boolean;
-  requirements: {
-    bins: string[];
-    env: string[];
-    config: string[];
-    os: string[];
-  };
-  missing: {
-    bins: string[];
-    env: string[];
-    config: string[];
-    os: string[];
-  };
+  requirements: SkillRequirementSet;
+  missing: SkillRequirementSet;
   configChecks: SkillStatusConfigCheck[];
   install: SkillInstallOption[];
 };
@@ -49,10 +47,45 @@ export type SkillStatusReport = {
   skills: SkillStatusEntry[];
 };
 
+export type SkillInstallRequest = {
+  name: string;
+  installId: string;
+  timeoutMs?: number;
+};
+
+export type SkillInstallResult = {
+  ok: boolean;
+  message: string;
+  stdout: string;
+  stderr: string;
+  code: number | null;
+  warnings?: string[];
+};
+
+export type SkillUpdateRequest = {
+  skillKey: string;
+  enabled?: boolean;
+  apiKey?: string;
+};
+
+export type SkillUpdateResult = {
+  ok: boolean;
+  skillKey: string;
+  config: Record<string, unknown>;
+};
+
 const resolveAgentId = (agentId: string): string => {
   const trimmed = agentId.trim();
   if (!trimmed) {
     throw new Error("Agent id is required to load skill status.");
+  }
+  return trimmed;
+};
+
+const resolveRequiredValue = (value: string, message: string): string => {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    throw new Error(message);
   }
   return trimmed;
 };
@@ -63,5 +96,30 @@ export const loadAgentSkillStatus = async (
 ): Promise<SkillStatusReport> => {
   return client.call<SkillStatusReport>("skills.status", {
     agentId: resolveAgentId(agentId),
+  });
+};
+
+export const installSkill = async (
+  client: GatewayClient,
+  params: SkillInstallRequest
+): Promise<SkillInstallResult> => {
+  return client.call<SkillInstallResult>("skills.install", {
+    name: resolveRequiredValue(params.name, "Skill name is required to install dependencies."),
+    installId: resolveRequiredValue(
+      params.installId,
+      "Install option id is required to install dependencies."
+    ),
+    ...(typeof params.timeoutMs === "number" ? { timeoutMs: params.timeoutMs } : {}),
+  });
+};
+
+export const updateSkill = async (
+  client: GatewayClient,
+  params: SkillUpdateRequest
+): Promise<SkillUpdateResult> => {
+  return client.call<SkillUpdateResult>("skills.update", {
+    skillKey: resolveRequiredValue(params.skillKey, "Skill key is required to update skill setup."),
+    ...(typeof params.enabled === "boolean" ? { enabled: params.enabled } : {}),
+    ...(typeof params.apiKey === "string" ? { apiKey: params.apiKey } : {}),
   });
 };

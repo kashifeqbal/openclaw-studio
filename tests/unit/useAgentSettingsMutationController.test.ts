@@ -18,7 +18,7 @@ import {
   readGatewayAgentSkillsAllowlist,
   updateGatewayAgentSkillsAllowlist,
 } from "@/lib/gateway/agentConfig";
-import { loadAgentSkillStatus } from "@/lib/skills/types";
+import { installSkill, loadAgentSkillStatus, updateSkill } from "@/lib/skills/types";
 
 let restartBlockHookParams:
   | {
@@ -106,6 +106,18 @@ vi.mock("@/lib/skills/types", () => ({
     workspaceDir: "/tmp/workspace",
     managedSkillsDir: "/tmp/skills",
     skills: [],
+  })),
+  installSkill: vi.fn(async () => ({
+    ok: true,
+    message: "Installed",
+    stdout: "",
+    stderr: "",
+    code: 0,
+  })),
+  updateSkill: vi.fn(async () => ({
+    ok: true,
+    skillKey: "browser",
+    config: {},
   })),
 }));
 
@@ -208,6 +220,8 @@ describe("useAgentSettingsMutationController", () => {
   const mockedReadGatewayAgentSkillsAllowlist = vi.mocked(readGatewayAgentSkillsAllowlist);
   const mockedUpdateGatewayAgentSkillsAllowlist = vi.mocked(updateGatewayAgentSkillsAllowlist);
   const mockedLoadAgentSkillStatus = vi.mocked(loadAgentSkillStatus);
+  const mockedInstallSkill = vi.mocked(installSkill);
+  const mockedUpdateSkill = vi.mocked(updateSkill);
 
   beforeEach(() => {
     restartBlockHookParams = null;
@@ -221,6 +235,8 @@ describe("useAgentSettingsMutationController", () => {
     mockedReadGatewayAgentSkillsAllowlist.mockReset();
     mockedUpdateGatewayAgentSkillsAllowlist.mockReset();
     mockedLoadAgentSkillStatus.mockReset();
+    mockedInstallSkill.mockReset();
+    mockedUpdateSkill.mockReset();
     mockedShouldAwaitRemoteRestart.mockResolvedValue(false);
     mockedReadGatewayAgentSkillsAllowlist.mockResolvedValue(undefined);
     mockedUpdateGatewayAgentSkillsAllowlist.mockResolvedValue(undefined);
@@ -228,6 +244,18 @@ describe("useAgentSettingsMutationController", () => {
       workspaceDir: "/tmp/workspace",
       managedSkillsDir: "/tmp/skills",
       skills: [],
+    });
+    mockedInstallSkill.mockResolvedValue({
+      ok: true,
+      message: "Installed",
+      stdout: "",
+      stderr: "",
+      code: 0,
+    });
+    mockedUpdateSkill.mockResolvedValue({
+      ok: true,
+      skillKey: "browser",
+      config: {},
     });
   });
 
@@ -450,6 +478,143 @@ describe("useAgentSettingsMutationController", () => {
     expect(mockedLoadAgentSkillStatus).not.toHaveBeenCalled();
   });
 
+  it("installs_skill_dependencies_with_per_skill_busy_and_message_state", async () => {
+    mockedLoadAgentSkillStatus.mockResolvedValue({
+      workspaceDir: "/tmp/workspace",
+      managedSkillsDir: "/tmp/skills",
+      skills: [],
+    });
+    const ctx = renderController({
+      settingsRouteActive: true,
+      inspectSidebarAgentId: "agent-1",
+      inspectSidebarTab: "skills",
+    });
+
+    await waitFor(() => {
+      expect(mockedLoadAgentSkillStatus).toHaveBeenCalledTimes(1);
+    });
+
+    await act(async () => {
+      await ctx.getValue().handleInstallSkill("agent-1", "browser", "browser", "install-browser");
+    });
+
+    expect(mockedInstallSkill).toHaveBeenCalledWith(expect.anything(), {
+      name: "browser",
+      installId: "install-browser",
+      timeoutMs: 120000,
+    });
+    expect(ctx.enqueueConfigMutation).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: "update-skill-setup" })
+    );
+    expect(ctx.getValue().settingsSkillsBusyKey).toBeNull();
+    expect(ctx.getValue().settingsSkillMessages.browser).toEqual({
+      kind: "success",
+      message: "Installed",
+    });
+    expect(mockedLoadAgentSkillStatus).toHaveBeenCalledTimes(2);
+  });
+
+  it("saves_skill_api_key_via_config_queue_and_refreshes_skills", async () => {
+    mockedLoadAgentSkillStatus.mockResolvedValue({
+      workspaceDir: "/tmp/workspace",
+      managedSkillsDir: "/tmp/skills",
+      skills: [],
+    });
+    const ctx = renderController({
+      settingsRouteActive: true,
+      inspectSidebarAgentId: "agent-1",
+      inspectSidebarTab: "skills",
+    });
+
+    await waitFor(() => {
+      expect(mockedLoadAgentSkillStatus).toHaveBeenCalledTimes(1);
+    });
+
+    await act(async () => {
+      ctx.getValue().handleSkillApiKeyDraftChange("browser", "token-123");
+    });
+    await act(async () => {
+      await ctx.getValue().handleSaveSkillApiKey("agent-1", "browser");
+    });
+
+    expect(mockedUpdateSkill).toHaveBeenCalledWith(expect.anything(), {
+      skillKey: "browser",
+      apiKey: "token-123",
+    });
+    expect(ctx.enqueueConfigMutation).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: "update-skill-setup" })
+    );
+    expect(ctx.refreshGatewayConfigSnapshot).toHaveBeenCalledTimes(1);
+    expect(ctx.getValue().settingsSkillApiKeyDrafts.browser).toBe("token-123");
+    expect(ctx.getValue().settingsSkillMessages.browser).toEqual({
+      kind: "success",
+      message: "API key saved",
+    });
+  });
+
+  it("preserves_api_key_draft_and_sets_error_message_when_save_fails", async () => {
+    mockedLoadAgentSkillStatus.mockResolvedValue({
+      workspaceDir: "/tmp/workspace",
+      managedSkillsDir: "/tmp/skills",
+      skills: [],
+    });
+    mockedUpdateSkill.mockRejectedValue(new Error("invalid key"));
+    const ctx = renderController({
+      settingsRouteActive: true,
+      inspectSidebarAgentId: "agent-1",
+      inspectSidebarTab: "skills",
+    });
+
+    await waitFor(() => {
+      expect(mockedLoadAgentSkillStatus).toHaveBeenCalledTimes(1);
+    });
+
+    await act(async () => {
+      ctx.getValue().handleSkillApiKeyDraftChange("browser", "token-123");
+    });
+    await act(async () => {
+      await ctx.getValue().handleSaveSkillApiKey("agent-1", "browser");
+    });
+
+    expect(ctx.getValue().settingsSkillApiKeyDrafts.browser).toBe("token-123");
+    expect(ctx.getValue().settingsSkillsError).toBe("invalid key");
+    expect(ctx.getValue().settingsSkillMessages.browser).toEqual({
+      kind: "error",
+      message: "invalid key",
+    });
+  });
+
+  it("rejects_empty_api_key_before_gateway_call", async () => {
+    mockedLoadAgentSkillStatus.mockResolvedValue({
+      workspaceDir: "/tmp/workspace",
+      managedSkillsDir: "/tmp/skills",
+      skills: [],
+    });
+    const ctx = renderController({
+      settingsRouteActive: true,
+      inspectSidebarAgentId: "agent-1",
+      inspectSidebarTab: "skills",
+    });
+
+    await waitFor(() => {
+      expect(mockedLoadAgentSkillStatus).toHaveBeenCalledTimes(1);
+    });
+
+    await act(async () => {
+      ctx.getValue().handleSkillApiKeyDraftChange("browser", "   ");
+    });
+    await act(async () => {
+      await ctx.getValue().handleSaveSkillApiKey("agent-1", "browser");
+    });
+
+    expect(mockedUpdateSkill).not.toHaveBeenCalled();
+    expect(ctx.getValue().settingsSkillsError).toBe("API key cannot be empty.");
+    expect(ctx.getValue().settingsSkillMessages.browser).toEqual({
+      kind: "error",
+      message: "API key cannot be empty.",
+    });
+  });
+
   it("disabling_one_skill_from_implicit_all_writes_explicit_allowlist", async () => {
     mockedLoadAgentSkillStatus.mockResolvedValue({
       workspaceDir: "/tmp/workspace",
@@ -467,8 +632,8 @@ describe("useAgentSettingsMutationController", () => {
           disabled: false,
           blockedByAllowlist: false,
           eligible: true,
-          requirements: { bins: [], env: [], config: [], os: [] },
-          missing: { bins: [], env: [], config: [], os: [] },
+          requirements: { bins: [], anyBins: [], env: [], config: [], os: [] },
+          missing: { bins: [], anyBins: [], env: [], config: [], os: [] },
           configChecks: [],
           install: [],
         },
@@ -484,8 +649,8 @@ describe("useAgentSettingsMutationController", () => {
           disabled: false,
           blockedByAllowlist: false,
           eligible: true,
-          requirements: { bins: [], env: [], config: [], os: [] },
-          missing: { bins: [], env: [], config: [], os: [] },
+          requirements: { bins: [], anyBins: [], env: [], config: [], os: [] },
+          missing: { bins: [], anyBins: [], env: [], config: [], os: [] },
           configChecks: [],
           install: [],
         },
@@ -501,8 +666,8 @@ describe("useAgentSettingsMutationController", () => {
           disabled: false,
           blockedByAllowlist: false,
           eligible: true,
-          requirements: { bins: [], env: [], config: [], os: [] },
-          missing: { bins: [], env: [], config: [], os: [] },
+          requirements: { bins: [], anyBins: [], env: [], config: [], os: [] },
+          missing: { bins: [], anyBins: [], env: [], config: [], os: [] },
           configChecks: [],
           install: [],
         },

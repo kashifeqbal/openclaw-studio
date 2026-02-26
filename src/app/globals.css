@@ -1158,6 +1158,10 @@ textarea:focus::-webkit-scrollbar {
   color: var(--danger-soft-fg);
 }
 
+.ui-text-success {
+  color: var(--status-running-fg);
+}
+
 .ui-badge-status-idle {
   border: 1px solid var(--status-idle-border);
   background: var(--status-idle-bg);

@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import type { GatewayClient } from "@/lib/gateway/GatewayClient";
-import { loadAgentSkillStatus } from "@/lib/skills/types";
+import { installSkill, loadAgentSkillStatus, updateSkill } from "@/lib/skills/types";
 
 describe("skills gateway client", () => {
   it("loads skills status for the selected agent", async () => {
@@ -27,6 +27,79 @@ describe("skills gateway client", () => {
 
     await expect(loadAgentSkillStatus(client, "  ")).rejects.toThrow(
       "Agent id is required to load skill status."
+    );
+    expect(client.call).not.toHaveBeenCalled();
+  });
+
+  it("installs skill dependencies with normalized params", async () => {
+    const response = {
+      ok: true,
+      message: "Installed",
+      stdout: "",
+      stderr: "",
+      code: 0,
+    };
+    const client = {
+      call: vi.fn(async () => response),
+    } as unknown as GatewayClient;
+
+    const result = await installSkill(client, {
+      name: " browser ",
+      installId: " install-browser ",
+      timeoutMs: 120_000,
+    });
+
+    expect(client.call).toHaveBeenCalledWith("skills.install", {
+      name: "browser",
+      installId: "install-browser",
+      timeoutMs: 120_000,
+    });
+    expect(result).toBe(response);
+  });
+
+  it("fails fast when install inputs are empty", async () => {
+    const client = {
+      call: vi.fn(),
+    } as unknown as GatewayClient;
+
+    await expect(installSkill(client, { name: " ", installId: "id" })).rejects.toThrow(
+      "Skill name is required to install dependencies."
+    );
+    await expect(installSkill(client, { name: "browser", installId: " " })).rejects.toThrow(
+      "Install option id is required to install dependencies."
+    );
+    expect(client.call).not.toHaveBeenCalled();
+  });
+
+  it("updates skill setup with normalized skill key", async () => {
+    const response = {
+      ok: true,
+      skillKey: "browser",
+      config: {},
+    };
+    const client = {
+      call: vi.fn(async () => response),
+    } as unknown as GatewayClient;
+
+    const result = await updateSkill(client, {
+      skillKey: " browser ",
+      apiKey: "secret-token",
+    });
+
+    expect(client.call).toHaveBeenCalledWith("skills.update", {
+      skillKey: "browser",
+      apiKey: "secret-token",
+    });
+    expect(result).toBe(response);
+  });
+
+  it("fails fast when skill key is empty for updates", async () => {
+    const client = {
+      call: vi.fn(),
+    } as unknown as GatewayClient;
+
+    await expect(updateSkill(client, { skillKey: " ", apiKey: "token" })).rejects.toThrow(
+      "Skill key is required to update skill setup."
     );
     expect(client.call).not.toHaveBeenCalled();
   });

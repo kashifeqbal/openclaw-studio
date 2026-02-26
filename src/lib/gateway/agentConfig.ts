@@ -78,6 +78,8 @@ export type GatewayAgentOverrides = {
   tools?: GatewayAgentToolsOverrides;
 };
 
+const DEFAULT_AGENT_ID = "main";
+
 export const readConfigAgentList = (
   config: Record<string, unknown> | undefined
 ): ConfigAgentEntry[] => {
@@ -89,6 +91,19 @@ export const readConfigAgentList = (
     if (typeof entry.id !== "string") return false;
     return entry.id.trim().length > 0;
   });
+};
+
+export const resolveDefaultConfigAgentId = (
+  config: Record<string, unknown> | undefined
+): string => {
+  const list = readConfigAgentList(config);
+  if (list.length === 0) {
+    return DEFAULT_AGENT_ID;
+  }
+  const defaults = list.filter((entry) => entry.default === true);
+  const selected = defaults[0] ?? list[0];
+  const resolved = selected.id.trim();
+  return resolved || DEFAULT_AGENT_ID;
 };
 
 export const writeConfigAgentList = (

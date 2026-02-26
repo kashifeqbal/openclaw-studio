@@ -41,6 +41,7 @@ import {
 import {
   createGatewayAgent,
   readConfigAgentList,
+  resolveDefaultConfigAgentId,
   slugifyAgentName,
 } from "@/lib/gateway/agentConfig";
 import { buildAvatarDataUrl } from "@/lib/avatars/multiavatar";
@@ -347,6 +348,22 @@ const AgentStudioPage = () => {
       .map((value) => value.trim())
       .filter((value) => value.length > 0);
   }, [gatewayConfigSnapshot, inspectSidebarAgent]);
+  const settingsDefaultAgentId = useMemo(() => {
+    const baseConfig =
+      gatewayConfigSnapshot?.config &&
+      typeof gatewayConfigSnapshot.config === "object" &&
+      !Array.isArray(gatewayConfigSnapshot.config)
+        ? (gatewayConfigSnapshot.config as Record<string, unknown>)
+        : undefined;
+    return resolveDefaultConfigAgentId(baseConfig);
+  }, [gatewayConfigSnapshot]);
+  const settingsSkillScopeWarning = useMemo(() => {
+    if (!inspectSidebarAgent) return null;
+    if (inspectSidebarAgent.agentId === settingsDefaultAgentId) {
+      return "Skill setup actions are gateway-wide. Install actions run in this default agent workspace.";
+    }
+    return `Skill setup actions are gateway-wide. Install actions currently run in the default agent workspace (${settingsDefaultAgentId}), not this agent (${inspectSidebarAgent.agentId}).`;
+  }, [inspectSidebarAgent, settingsDefaultAgentId]);
   const focusedPendingExecApprovals = useMemo(() => {
     if (!focusedAgentId) return unscopedPendingExecApprovals;
     const scoped = pendingExecApprovalsByAgentId[focusedAgentId] ?? [];
@@ -1475,6 +1492,10 @@ const AgentStudioPage = () => {
                             skillsLoading={settingsMutationController.settingsSkillsLoading}
                             skillsError={settingsMutationController.settingsSkillsError}
                             skillsBusy={settingsMutationController.settingsSkillsBusy}
+                            skillsBusyKey={settingsMutationController.settingsSkillsBusyKey}
+                            skillMessages={settingsMutationController.settingsSkillMessages}
+                            skillApiKeyDrafts={settingsMutationController.settingsSkillApiKeyDrafts}
+                            defaultAgentScopeWarning={settingsSkillScopeWarning}
                             skillsAllowlist={settingsAgentSkillsAllowlist}
                             onUseAllSkills={() =>
                               settingsMutationController.handleUseAllSkills(inspectSidebarAgent.agentId)
@@ -1487,6 +1508,23 @@ const AgentStudioPage = () => {
                                 inspectSidebarAgent.agentId,
                                 skillName,
                                 enabled
+                              )
+                            }
+                            onInstallSkill={(skillKey, name, installId) =>
+                              settingsMutationController.handleInstallSkill(
+                                inspectSidebarAgent.agentId,
+                                skillKey,
+                                name,
+                                installId
+                              )
+                            }
+                            onSkillApiKeyChange={(skillKey, value) =>
+                              settingsMutationController.handleSkillApiKeyDraftChange(skillKey, value)
+                            }
+                            onSaveSkillApiKey={(skillKey) =>
+                              settingsMutationController.handleSaveSkillApiKey(
+                                inspectSidebarAgent.agentId,
+                                skillKey
                               )
                             }
                             cronJobs={settingsMutationController.settingsCronJobs}

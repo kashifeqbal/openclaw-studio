@@ -61,7 +61,7 @@ const createSkillsReport = (): SkillStatusReport => ({
     {
       name: "github",
       description: "GitHub integration",
-      source: "shared",
+      source: "openclaw-workspace",
       bundled: false,
       filePath: "/tmp/skills/github/SKILL.md",
       baseDir: "/tmp/skills/github",
@@ -70,27 +70,35 @@ const createSkillsReport = (): SkillStatusReport => ({
       disabled: false,
       blockedByAllowlist: false,
       eligible: true,
-      requirements: { bins: [], env: [], config: [], os: [] },
-      missing: { bins: [], env: [], config: [], os: [] },
+      requirements: { bins: [], anyBins: [], env: [], config: [], os: [] },
+      missing: { bins: [], anyBins: [], env: [], config: [], os: [] },
       configChecks: [],
       install: [],
     },
     {
       name: "browser",
       description: "Browser automation",
-      source: "bundled",
+      source: "openclaw-bundled",
       bundled: true,
       filePath: "/tmp/skills/browser/SKILL.md",
       baseDir: "/tmp/skills/browser",
       skillKey: "browser",
+      primaryEnv: "BROWSER_API_KEY",
       always: false,
       disabled: true,
       blockedByAllowlist: true,
       eligible: false,
-      requirements: { bins: ["playwright"], env: [], config: [], os: [] },
-      missing: { bins: ["playwright"], env: [], config: [], os: [] },
+      requirements: { bins: ["playwright"], anyBins: [], env: [], config: [], os: [] },
+      missing: { bins: ["playwright"], anyBins: [], env: [], config: [], os: [] },
       configChecks: [],
-      install: [],
+      install: [
+        {
+          id: "install-playwright",
+          kind: "node",
+          label: "Install playwright",
+          bins: ["playwright"],
+        },
+      ],
     },
   ],
 });
@@ -394,6 +402,61 @@ describe("AgentSettingsPanel", () => {
     expect(onDisableAllSkills).toHaveBeenCalledTimes(1);
   });
 
+  it("hides_bundled_blocked_skills_by_default_and_can_show_them", () => {
+    render(
+      createElement(AgentSettingsPanel, {
+        agent: createAgent(),
+        mode: "skills",
+        onClose: vi.fn(),
+        onDelete: vi.fn(),
+        onToolCallingToggle: vi.fn(),
+        onThinkingTracesToggle: vi.fn(),
+        cronJobs: [],
+        cronLoading: false,
+        cronError: null,
+        cronRunBusyJobId: null,
+        cronDeleteBusyJobId: null,
+        onRunCronJob: vi.fn(),
+        onDeleteCronJob: vi.fn(),
+        skillsReport: createSkillsReport(),
+      })
+    );
+
+    expect(screen.queryByText("browser")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByLabelText("Hide bundled + blocked"));
+    fireEvent.click(screen.getByText("Built-in Skills"));
+
+    expect(screen.getByText("browser")).toBeInTheDocument();
+  });
+
+  it("renders_explicit_missing_and_reason_lines_for_blocked_skills", () => {
+    render(
+      createElement(AgentSettingsPanel, {
+        agent: createAgent(),
+        mode: "skills",
+        onClose: vi.fn(),
+        onDelete: vi.fn(),
+        onToolCallingToggle: vi.fn(),
+        onThinkingTracesToggle: vi.fn(),
+        cronJobs: [],
+        cronLoading: false,
+        cronError: null,
+        cronRunBusyJobId: null,
+        cronDeleteBusyJobId: null,
+        onRunCronJob: vi.fn(),
+        onDeleteCronJob: vi.fn(),
+        skillsReport: createSkillsReport(),
+      })
+    );
+
+    fireEvent.click(screen.getByLabelText("Hide bundled + blocked"));
+    fireEvent.click(screen.getByText("Built-in Skills"));
+
+    expect(screen.getByText("Missing tools: playwright")).toBeInTheDocument();
+    expect(screen.getByText("Reason: disabled, blocked by allowlist, missing tools")).toBeInTheDocument();
+  });
+
   it("filters_skills_list_from_search_input", () => {
     render(
       createElement(AgentSettingsPanel, {
@@ -414,9 +477,11 @@ describe("AgentSettingsPanel", () => {
       })
     );
 
+    fireEvent.click(screen.getByLabelText("Hide bundled + blocked"));
     fireEvent.change(screen.getByLabelText("Search skills"), {
       target: { value: "browse" },
     });
+    fireEvent.click(screen.getByText("Built-in Skills"));
 
     expect(screen.getByText("browser")).toBeInTheDocument();
     expect(screen.queryByText("github")).not.toBeInTheDocument();
@@ -445,6 +510,9 @@ describe("AgentSettingsPanel", () => {
       })
     );
 
+    fireEvent.click(screen.getByLabelText("Hide bundled + blocked"));
+    fireEvent.click(screen.getByText("Workspace Skills"));
+    fireEvent.click(screen.getByText("Built-in Skills"));
     const githubToggle = screen.getByRole("switch", { name: "Skill github" });
     const browserToggle = screen.getByRole("switch", { name: "Skill browser" });
     expect(githubToggle).toHaveAttribute("aria-checked", "true");
@@ -454,6 +522,72 @@ describe("AgentSettingsPanel", () => {
     fireEvent.click(browserToggle);
     expect(onSetSkillEnabled).toHaveBeenNthCalledWith(1, "github", false);
     expect(onSetSkillEnabled).toHaveBeenNthCalledWith(2, "browser", true);
+  });
+
+  it("runs_install_and_api_key_actions", () => {
+    const onInstallSkill = vi.fn();
+    const onSkillApiKeyChange = vi.fn();
+    const onSaveSkillApiKey = vi.fn();
+    render(
+      createElement(AgentSettingsPanel, {
+        agent: createAgent(),
+        mode: "skills",
+        onClose: vi.fn(),
+        onDelete: vi.fn(),
+        onToolCallingToggle: vi.fn(),
+        onThinkingTracesToggle: vi.fn(),
+        cronJobs: [],
+        cronLoading: false,
+        cronError: null,
+        cronRunBusyJobId: null,
+        cronDeleteBusyJobId: null,
+        onRunCronJob: vi.fn(),
+        onDeleteCronJob: vi.fn(),
+        skillsReport: createSkillsReport(),
+        skillApiKeyDrafts: { browser: "seed-key" },
+        onInstallSkill,
+        onSkillApiKeyChange,
+        onSaveSkillApiKey,
+      })
+    );
+
+    fireEvent.click(screen.getByLabelText("Hide bundled + blocked"));
+    fireEvent.click(screen.getByText("Built-in Skills"));
+    fireEvent.click(screen.getByRole("button", { name: "Install playwright" }));
+    fireEvent.change(screen.getByLabelText("API key for browser"), {
+      target: { value: "test-key" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save BROWSER_API_KEY" }));
+
+    expect(onInstallSkill).toHaveBeenCalledWith("browser", "browser", "install-playwright");
+    expect(onSkillApiKeyChange).toHaveBeenCalledWith("browser", "test-key");
+    expect(onSaveSkillApiKey).toHaveBeenCalledWith("browser");
+  });
+
+  it("disables_api_key_save_when_input_is_blank", () => {
+    render(
+      createElement(AgentSettingsPanel, {
+        agent: createAgent(),
+        mode: "skills",
+        onClose: vi.fn(),
+        onDelete: vi.fn(),
+        onToolCallingToggle: vi.fn(),
+        onThinkingTracesToggle: vi.fn(),
+        cronJobs: [],
+        cronLoading: false,
+        cronError: null,
+        cronRunBusyJobId: null,
+        cronDeleteBusyJobId: null,
+        onRunCronJob: vi.fn(),
+        onDeleteCronJob: vi.fn(),
+        skillsReport: createSkillsReport(),
+      })
+    );
+
+    fireEvent.click(screen.getByLabelText("Hide bundled + blocked"));
+    fireEvent.click(screen.getByText("Built-in Skills"));
+
+    expect(screen.getByRole("button", { name: "Save BROWSER_API_KEY" })).toBeDisabled();
   });
 
   it("shows_enabled_count_based_on_visible_skills_not_raw_allowlist_size", () => {

@@ -35,9 +35,16 @@ import {
   updateGatewayAgentSkillsAllowlist,
 } from "@/lib/gateway/agentConfig";
 import { fetchJson } from "@/lib/http";
-import { loadAgentSkillStatus, type SkillStatusReport } from "@/lib/skills/types";
+import {
+  installSkill,
+  loadAgentSkillStatus,
+  updateSkill,
+  type SkillStatusReport,
+} from "@/lib/skills/types";
 
 export type RestartingMutationBlockState = MutationBlockState & { kind: MutationWorkflowKind };
+export type SkillSetupMessage = { kind: "success" | "error"; message: string };
+export type SkillSetupMessageMap = Record<string, SkillSetupMessage>;
 
 type AgentForSettingsMutation = Pick<AgentState, "agentId" | "name" | "sessionKey">;
 
@@ -72,6 +79,11 @@ export function useAgentSettingsMutationController(params: UseAgentSettingsMutat
   const [settingsSkillsLoading, setSettingsSkillsLoading] = useState(false);
   const [settingsSkillsError, setSettingsSkillsError] = useState<string | null>(null);
   const [settingsSkillsBusy, setSettingsSkillsBusy] = useState(false);
+  const [settingsSkillsBusyKey, setSettingsSkillsBusyKey] = useState<string | null>(null);
+  const [settingsSkillMessages, setSettingsSkillMessages] = useState<SkillSetupMessageMap>({});
+  const [settingsSkillApiKeyDrafts, setSettingsSkillApiKeyDrafts] = useState<Record<string, string>>(
+    {}
+  );
   const [settingsCronJobs, setSettingsCronJobs] = useState<CronJobSummary[]>([]);
   const [settingsCronLoading, setSettingsCronLoading] = useState(false);
   const [settingsCronError, setSettingsCronError] = useState<string | null>(null);
@@ -81,6 +93,7 @@ export function useAgentSettingsMutationController(params: UseAgentSettingsMutat
   const [restartingMutationBlock, setRestartingMutationBlock] =
     useState<RestartingMutationBlockState | null>(null);
   const REMOTE_MUTATION_EXEC_TIMEOUT_MS = 45_000;
+  const SKILL_INSTALL_TIMEOUT_MS = 120_000;
 
   const hasRenameMutationBlock = restartingMutationBlock?.kind === "rename-agent";
   const hasDeleteMutationBlock = restartingMutationBlock?.kind === "delete-agent";
@@ -108,6 +121,22 @@ export function useAgentSettingsMutationController(params: UseAgentSettingsMutat
       params.status,
     ]
   );
+
+  const setSkillMessage = useCallback((skillKey: string, message?: SkillSetupMessage) => {
+    const normalizedSkillKey = skillKey.trim();
+    if (!normalizedSkillKey) {
+      return;
+    }
+    setSettingsSkillMessages((current) => {
+      const next = { ...current };
+      if (!message) {
+        delete next[normalizedSkillKey];
+      } else {
+        next[normalizedSkillKey] = message;
+      }
+      return next;
+    });
+  }, []);
 
   const loadSkillsForSettingsAgent = useCallback(
     async (agentId: string) => {
@@ -160,6 +189,9 @@ export function useAgentSettingsMutationController(params: UseAgentSettingsMutat
       setSettingsSkillsLoading(false);
       setSettingsSkillsError(null);
       setSettingsSkillsBusy(false);
+      setSettingsSkillsBusyKey(null);
+      setSettingsSkillMessages({});
+      setSettingsSkillApiKeyDrafts({});
       return;
     }
     void loadSkillsForSettingsAgent(params.inspectSidebarAgentId);
@@ -170,6 +202,12 @@ export function useAgentSettingsMutationController(params: UseAgentSettingsMutat
     params.settingsRouteActive,
     params.status,
   ]);
+
+  useEffect(() => {
+    setSettingsSkillsBusyKey(null);
+    setSettingsSkillMessages({});
+    setSettingsSkillApiKeyDrafts({});
+  }, [params.inspectSidebarAgentId]);
 
   const loadCronJobsForSettingsAgent = useCallback(
     async (agentId: string) => {
@@ -592,6 +630,26 @@ export function useAgentSettingsMutationController(params: UseAgentSettingsMutat
     [mutationContext, params]
   );
 
+  const reloadSkillsIfVisible = useCallback(
+    async (agentId: string) => {
+      if (
+        params.settingsRouteActive &&
+        params.inspectSidebarTab === "skills" &&
+        params.inspectSidebarAgentId === agentId &&
+        params.status === "connected"
+      ) {
+        await loadSkillsForSettingsAgent(agentId);
+      }
+    },
+    [
+      loadSkillsForSettingsAgent,
+      params.inspectSidebarAgentId,
+      params.inspectSidebarTab,
+      params.settingsRouteActive,
+      params.status,
+    ]
+  );
+
   const runSkillsMutation = useCallback(
     async (input: {
       agentId: string;
@@ -626,14 +684,7 @@ export function useAgentSettingsMutationController(params: UseAgentSettingsMutat
             await input.run(decision.normalizedAgentId);
             await params.loadAgents();
             await params.refreshGatewayConfigSnapshot();
-            if (
-              params.settingsRouteActive &&
-              params.inspectSidebarTab === "skills" &&
-              params.inspectSidebarAgentId === decision.normalizedAgentId &&
-              params.status === "connected"
-            ) {
-              await loadSkillsForSettingsAgent(decision.normalizedAgentId);
-            }
+            await reloadSkillsIfVisible(decision.normalizedAgentId);
           },
         });
       } catch (err) {
@@ -646,7 +697,7 @@ export function useAgentSettingsMutationController(params: UseAgentSettingsMutat
         setSettingsSkillsBusy(false);
       }
     },
-    [loadSkillsForSettingsAgent, mutationContext, params]
+    [mutationContext, params, reloadSkillsIfVisible]
   );
 
   const handleUseAllSkills = useCallback(
@@ -726,11 +777,141 @@ export function useAgentSettingsMutationController(params: UseAgentSettingsMutat
     [params.client, runSkillsMutation, settingsSkillsReport]
   );
 
+  const handleSkillApiKeyDraftChange = useCallback((skillKey: string, value: string) => {
+    const normalizedSkillKey = skillKey.trim();
+    if (!normalizedSkillKey) {
+      return;
+    }
+    setSettingsSkillApiKeyDrafts((current) => ({
+      ...current,
+      [normalizedSkillKey]: value,
+    }));
+  }, []);
+
+  const runSkillSetupMutation = useCallback(
+    async (input: {
+      agentId: string;
+      decisionKind: "install-skill" | "save-skill-api-key";
+      skillKey: string;
+      label: string;
+      run: () => Promise<{ successMessage: string }>;
+      refreshConfigSnapshot?: boolean;
+    }) => {
+      const normalizedSkillKey = input.skillKey.trim();
+      const decision = planAgentSettingsMutation(
+        {
+          kind: input.decisionKind,
+          agentId: input.agentId,
+          skillKey: normalizedSkillKey,
+        },
+        mutationContext
+      );
+      if (decision.kind === "deny") {
+        if (decision.message) {
+          setSettingsSkillsError(decision.message);
+        }
+        return;
+      }
+
+      setSettingsSkillsError(null);
+      setSettingsSkillsBusyKey(normalizedSkillKey);
+      setSkillMessage(normalizedSkillKey);
+      try {
+        await params.enqueueConfigMutation({
+          kind: "update-skill-setup",
+          label: input.label,
+          run: async () => {
+            const result = await input.run();
+            if (input.refreshConfigSnapshot) {
+              await params.refreshGatewayConfigSnapshot();
+            }
+            await reloadSkillsIfVisible(decision.normalizedAgentId);
+            setSkillMessage(normalizedSkillKey, {
+              kind: "success",
+              message: result.successMessage,
+            });
+          },
+        });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "Failed to update skill setup.";
+        setSettingsSkillsError(message);
+        setSkillMessage(normalizedSkillKey, {
+          kind: "error",
+          message,
+        });
+        if (!isGatewayDisconnectLikeError(err)) {
+          console.error(message);
+        }
+      } finally {
+        setSettingsSkillsBusyKey((current) => (current === normalizedSkillKey ? null : current));
+      }
+    },
+    [mutationContext, params, reloadSkillsIfVisible, setSkillMessage]
+  );
+
+  const handleInstallSkill = useCallback(
+    async (agentId: string, skillKey: string, name: string, installId: string) => {
+      await runSkillSetupMutation({
+        agentId,
+        decisionKind: "install-skill",
+        skillKey,
+        label: `Install dependencies for ${name.trim() || skillKey.trim()}`,
+        run: async () => {
+          const result = await installSkill(params.client, {
+            name,
+            installId,
+            timeoutMs: SKILL_INSTALL_TIMEOUT_MS,
+          });
+          return {
+            successMessage: result.message || "Installed",
+          };
+        },
+      });
+    },
+    [SKILL_INSTALL_TIMEOUT_MS, params.client, runSkillSetupMutation]
+  );
+
+  const handleSaveSkillApiKey = useCallback(
+    async (agentId: string, skillKey: string) => {
+      const normalizedSkillKey = skillKey.trim();
+      const apiKey = (settingsSkillApiKeyDrafts[normalizedSkillKey] ?? "").trim();
+      if (!apiKey) {
+        const message = "API key cannot be empty.";
+        setSettingsSkillsError(message);
+        setSkillMessage(normalizedSkillKey, {
+          kind: "error",
+          message,
+        });
+        return;
+      }
+      await runSkillSetupMutation({
+        agentId,
+        decisionKind: "save-skill-api-key",
+        skillKey: normalizedSkillKey,
+        label: `Save API key for ${normalizedSkillKey}`,
+        refreshConfigSnapshot: true,
+        run: async () => {
+          await updateSkill(params.client, {
+            skillKey: normalizedSkillKey,
+            apiKey,
+          });
+          return {
+            successMessage: "API key saved",
+          };
+        },
+      });
+    },
+    [params.client, runSkillSetupMutation, setSkillMessage, settingsSkillApiKeyDrafts]
+  );
+
   return {
     settingsSkillsReport,
     settingsSkillsLoading,
     settingsSkillsError,
     settingsSkillsBusy,
+    settingsSkillsBusyKey,
+    settingsSkillMessages,
+    settingsSkillApiKeyDrafts,
     settingsCronJobs,
     settingsCronLoading,
     settingsCronError,
@@ -750,5 +931,8 @@ export function useAgentSettingsMutationController(params: UseAgentSettingsMutat
     handleUseAllSkills,
     handleDisableAllSkills,
     handleSetSkillEnabled,
+    handleInstallSkill,
+    handleSkillApiKeyDraftChange,
+    handleSaveSkillApiKey,
   };
 }
