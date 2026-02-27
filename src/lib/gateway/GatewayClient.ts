@@ -175,51 +175,65 @@ export class GatewayClient {
       this.rejectConnect = reject;
     });
 
-    this.client = new GatewayBrowserClient({
+    const nextClient = new GatewayBrowserClient({
       url: options.gatewayUrl,
       token: options.token,
       authScopeKey: options.authScopeKey,
       clientName: options.clientName,
       disableDeviceAuth: options.disableDeviceAuth,
       onHello: (hello) => {
+        if (this.client !== nextClient) return;
         this.lastHello = hello;
         this.updateStatus("connected");
         this.resolveConnect?.();
         this.clearConnectPromise();
       },
-	      onEvent: (event) => {
-	        this.eventHandlers.forEach((handler) => handler(event));
-	      },
-	      onClose: ({ code, reason }) => {
-	        const connectFailed =
-	          code === CONNECT_FAILED_CLOSE_CODE ? parseConnectFailedCloseReason(reason) : null;
-	        const err = connectFailed
-	          ? new GatewayResponseError({
-	              code: connectFailed.code,
-	              message: connectFailed.message,
-	            })
-	          : new Error(`Gateway closed (${code}): ${reason}`);
-	        if (this.rejectConnect) {
-	          this.rejectConnect(err);
-	          this.clearConnectPromise();
-	        }
-	        this.updateStatus(this.manualDisconnect ? "disconnected" : "connecting");
+      onEvent: (event) => {
+        if (this.client !== nextClient) return;
+        this.eventHandlers.forEach((handler) => handler(event));
+      },
+      onClose: ({ code, reason }) => {
+        if (this.client !== nextClient) return;
+        const connectFailed =
+          code === CONNECT_FAILED_CLOSE_CODE ? parseConnectFailedCloseReason(reason) : null;
+        const err = connectFailed
+          ? new GatewayResponseError({
+              code: connectFailed.code,
+              message: connectFailed.message,
+            })
+          : new Error(`Gateway closed (${code}): ${reason}`);
+        if (this.rejectConnect) {
+          this.rejectConnect(err);
+          this.clearConnectPromise();
+        }
+        if (!this.manualDisconnect) {
+          nextClient.stop();
+        }
+        if (this.client === nextClient) {
+          this.client = null;
+        }
+        this.updateStatus("disconnected");
         if (this.manualDisconnect) {
           console.info("Gateway disconnected.");
         }
       },
       onGap: ({ expected, received }) => {
+        if (this.client !== nextClient) return;
         this.gapHandlers.forEach((handler) => handler({ expected, received }));
       },
     });
 
-    this.client.start();
+    this.client = nextClient;
+    nextClient.start();
 
     try {
       await this.pendingConnect;
     } catch (err) {
-      this.client.stop();
-      this.client = null;
+      const activeClient = this.client;
+      activeClient?.stop();
+      if (this.client === activeClient) {
+        this.client = null;
+      }
       this.updateStatus("disconnected");
       throw err;
     }
