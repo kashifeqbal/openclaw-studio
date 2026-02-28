@@ -8,6 +8,8 @@ import {
   isMetaMarkdown,
   parseMetaMarkdown,
 } from "@/lib/text/message-extract";
+import { isStudioDomainIntentModeEnabled } from "@/lib/controlplane/domain-mode";
+import { postStudioIntent } from "@/lib/controlplane/intents-client";
 import type { AgentState } from "@/features/agents/state/store";
 import { randomUUID } from "@/lib/uuid";
 import type { TranscriptAppendMeta } from "@/features/agents/state/transcript";
@@ -71,6 +73,7 @@ export async function sendChatMessageViaStudio(params: {
   echoUserMessage?: boolean;
   now?: () => number;
   generateRunId?: () => string;
+  useDomainIntents?: boolean;
 }): Promise<void> {
   const trimmed = params.message.trim();
   if (!trimmed) return;
@@ -78,6 +81,7 @@ export async function sendChatMessageViaStudio(params: {
 
   const generateRunId = params.generateRunId ?? (() => randomUUID());
   const now = params.now ?? (() => Date.now());
+  const useDomainIntents = params.useDomainIntents ?? isStudioDomainIntentModeEnabled();
 
   const agentId = params.agentId;
   const runId = generateRunId();
@@ -184,12 +188,23 @@ export async function sendChatMessageViaStudio(params: {
       }
     }
 
-    const sendResult = await params.client.call("chat.send", {
+    const sendPayload = {
       sessionKey: params.sessionKey,
       message: buildAgentInstruction({ message: trimmed }),
       deliver: false,
       idempotencyKey: runId,
-    });
+    };
+    const sendResult = useDomainIntents
+      ? await postStudioIntent<unknown>("/api/intents/chat-send", sendPayload).then(
+          (result) =>
+            (result &&
+            typeof result === "object" &&
+            "payload" in result &&
+            (result as { payload?: unknown }).payload !== undefined
+              ? (result as { payload: unknown }).payload
+              : result) as unknown
+        )
+      : await params.client.call("chat.send", sendPayload);
 
     if (!createdSession) {
       params.dispatch({

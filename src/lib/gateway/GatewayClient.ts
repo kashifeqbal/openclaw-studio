@@ -100,7 +100,7 @@ const normalizeLocalGatewayDefaults = (value: unknown): StudioGatewaySettings | 
   const raw = value as { url?: unknown; token?: unknown };
   const url = typeof raw.url === "string" ? raw.url.trim() : "";
   const token = typeof raw.token === "string" ? raw.token.trim() : "";
-  if (!url || !token) return null;
+  if (!url) return null;
   return { url, token };
 };
 
@@ -411,6 +411,7 @@ export type GatewayConnectionState = {
   gatewayUrl: string;
   token: string;
   localGatewayDefaults: StudioGatewaySettings | null;
+  domainApiModeEnabled: boolean | null;
   error: string | null;
   connect: () => Promise<void>;
   disconnect: () => void;
@@ -486,16 +487,18 @@ export const useGatewayConnection = (
 ): GatewayConnectionState => {
   const [client] = useState(() => new GatewayClient());
   const didAutoConnect = useRef(false);
-  const loadedGatewaySettings = useRef<{ gatewayUrl: string; token: string } | null>(null);
+  const loadedGatewaySettings = useRef<{ gatewayUrl: string } | null>(null);
   const retryAttemptRef = useRef(0);
   const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const wasManualDisconnectRef = useRef(false);
+  const tokenDirtyRef = useRef(false);
 
   const [gatewayUrl, setGatewayUrl] = useState(DEFAULT_UPSTREAM_GATEWAY_URL);
-  const [token, setToken] = useState("");
+  const [token, setTokenState] = useState("");
   const [localGatewayDefaults, setLocalGatewayDefaults] = useState<StudioGatewaySettings | null>(
     null
   );
+  const [domainApiModeEnabled, setDomainApiModeEnabled] = useState<boolean | null>(null);
   const [status, setStatus] = useState<GatewayStatus>("disconnected");
   const [error, setError] = useState<string | null>(null);
   const [connectErrorCode, setConnectErrorCode] = useState<string | null>(null);
@@ -513,14 +516,19 @@ export const useGatewayConnection = (
         const gateway = settings?.gateway ?? null;
         if (cancelled) return;
         setLocalGatewayDefaults(normalizeLocalGatewayDefaults(envelope.localGatewayDefaults));
+        const envelopeDomainMode =
+          "domainApiModeEnabled" in envelope ? envelope.domainApiModeEnabled : undefined;
+        setDomainApiModeEnabled(
+          typeof envelopeDomainMode === "boolean" ? envelopeDomainMode : null
+        );
         const nextGatewayUrl = gateway?.url?.trim() ? gateway.url : DEFAULT_UPSTREAM_GATEWAY_URL;
         const nextToken = typeof gateway?.token === "string" ? gateway.token : "";
         loadedGatewaySettings.current = {
           gatewayUrl: nextGatewayUrl.trim(),
-          token: nextToken,
         };
         setGatewayUrl(nextGatewayUrl);
-        setToken(nextToken);
+        setTokenState(nextToken);
+        tokenDirtyRef.current = false;
       } catch (err) {
         if (!cancelled) {
           const message = err instanceof Error ? err.message : "Failed to load gateway settings.";
@@ -531,7 +539,6 @@ export const useGatewayConnection = (
           if (!loadedGatewaySettings.current) {
             loadedGatewaySettings.current = {
               gatewayUrl: DEFAULT_UPSTREAM_GATEWAY_URL.trim(),
-              token: "",
             };
           }
           setSettingsLoaded(true);
@@ -636,18 +643,22 @@ export const useGatewayConnection = (
     const baseline = loadedGatewaySettings.current;
     if (!baseline) return;
     const nextGatewayUrl = gatewayUrl.trim();
-    if (nextGatewayUrl === baseline.gatewayUrl && token === baseline.token) {
+    const shouldPersistToken = tokenDirtyRef.current;
+    if (!shouldPersistToken && nextGatewayUrl === baseline.gatewayUrl) {
       return;
+    }
+    const gatewayPatch: { url: string; token?: string } = { url: nextGatewayUrl };
+    if (shouldPersistToken) {
+      gatewayPatch.token = token;
+      tokenDirtyRef.current = false;
     }
     settingsCoordinator.schedulePatch(
       {
-        gateway: {
-          url: nextGatewayUrl,
-          token,
-        },
+        gateway: gatewayPatch,
       },
       400
     );
+    loadedGatewaySettings.current = { gatewayUrl: nextGatewayUrl };
   }, [gatewayUrl, settingsCoordinator, settingsLoaded, token]);
 
   const useLocalGatewayDefaults = useCallback(() => {
@@ -655,10 +666,16 @@ export const useGatewayConnection = (
       return;
     }
     setGatewayUrl(localGatewayDefaults.url);
-    setToken(localGatewayDefaults.token);
+    setTokenState(localGatewayDefaults.token);
+    tokenDirtyRef.current = false;
     setError(null);
     setConnectErrorCode(null);
   }, [localGatewayDefaults]);
+
+  const setToken = useCallback((value: string) => {
+    tokenDirtyRef.current = true;
+    setTokenState(value);
+  }, []);
 
   const disconnect = useCallback(() => {
     setError(null);
@@ -678,6 +695,7 @@ export const useGatewayConnection = (
     gatewayUrl,
     token,
     localGatewayDefaults,
+    domainApiModeEnabled,
     error,
     connect,
     disconnect,

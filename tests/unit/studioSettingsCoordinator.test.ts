@@ -88,4 +88,27 @@ describe("StudioSettingsCoordinator", () => {
 
     expect(updateSettings).not.toHaveBeenCalled();
   });
+
+  it("requeues pending patch when update fails", async () => {
+    const fetchSettings = vi.fn(async () => ({ settings: defaultStudioSettings() }));
+    const updateSettings = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("write failed"))
+      .mockResolvedValue({ settings: defaultStudioSettings() });
+    const coordinator = new StudioSettingsCoordinator({ fetchSettings, updateSettings }, 1000);
+
+    coordinator.schedulePatch({
+      gateway: { url: "ws://localhost:18789", token: "session-a" },
+    });
+
+    await expect(coordinator.flushPending()).rejects.toThrow("write failed");
+    await coordinator.flushPending();
+
+    expect(updateSettings).toHaveBeenCalledTimes(2);
+    expect(updateSettings).toHaveBeenNthCalledWith(2, {
+      gateway: { url: "ws://localhost:18789", token: "session-a" },
+    });
+
+    coordinator.dispose();
+  });
 });

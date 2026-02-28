@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 
 const repoRoot = process.cwd();
-const sourcePath = path.join(os.homedir(), "clawdbot", "ui", "src", "ui", "gateway.ts");
+const sourcePath = path.join(os.homedir(), "openclaw", "ui", "src", "ui", "gateway.ts");
 const destPath = path.join(
   repoRoot,
   "src",

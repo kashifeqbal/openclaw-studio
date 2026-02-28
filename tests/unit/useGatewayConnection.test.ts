@@ -74,7 +74,10 @@ const setupAndImportHook = async (gatewayUrl: string | null) => {
       gatewayUrl: string;
       token: string;
       localGatewayDefaults: { url: string; token: string } | null;
+      domainApiModeEnabled: boolean | null;
       useLocalGatewayDefaults: () => void;
+      setGatewayUrl: (value: string) => void;
+      setToken: (value: string) => void;
     },
     captured,
   };
@@ -166,11 +169,12 @@ describe("useGatewayConnection", () => {
       loadSettingsEnvelope: async () => ({
         settings: {
           version: 1,
-          gateway: { url: "wss://remote.example", token: "remote-token" },
+          gateway: { url: "wss://remote.example", token: "" },
           focused: {},
           avatars: {},
         },
-        localGatewayDefaults: { url: "ws://localhost:18789", token: "local-token" },
+        localGatewayDefaults: { url: "ws://localhost:18789", token: "" },
+        domainApiModeEnabled: true,
       }),
       schedulePatch: () => {},
       flushPending: async () => {},
@@ -189,6 +193,11 @@ describe("useGatewayConnection", () => {
           state.localGatewayDefaults?.url ?? ""
         ),
         createElement(
+          "div",
+          { "data-testid": "domainApiModeEnabled" },
+          state.domainApiModeEnabled === null ? "null" : String(state.domainApiModeEnabled)
+        ),
+        createElement(
           "button",
           {
             type: "button",
@@ -205,14 +214,123 @@ describe("useGatewayConnection", () => {
     await waitFor(() => {
       expect(screen.getByTestId("gatewayUrl")).toHaveTextContent("wss://remote.example");
     });
-    expect(screen.getByTestId("token")).toHaveTextContent("remote-token");
+    expect(screen.getByTestId("token")).toHaveTextContent("");
     expect(screen.getByTestId("localDefaultsUrl")).toHaveTextContent("ws://localhost:18789");
+    expect(screen.getByTestId("domainApiModeEnabled")).toHaveTextContent("true");
 
     fireEvent.click(screen.getByTestId("useLocalDefaults"));
 
     await waitFor(() => {
       expect(screen.getByTestId("gatewayUrl")).toHaveTextContent("ws://localhost:18789");
     });
-    expect(screen.getByTestId("token")).toHaveTextContent("local-token");
+    expect(screen.getByTestId("token")).toHaveTextContent("");
+  });
+
+  it("persists gateway url changes without sending token", async () => {
+    const { useGatewayConnection } = await setupAndImportHook(null);
+    const schedulePatch = vi.fn();
+    const coordinator = {
+      loadSettings: async () => null,
+      loadSettingsEnvelope: async () => ({
+        settings: {
+          version: 1,
+          gateway: { url: "wss://remote.example", token: "" },
+          focused: {},
+          avatars: {},
+        },
+        localGatewayDefaults: null,
+      }),
+      schedulePatch,
+      flushPending: async () => {},
+    };
+
+    const Probe = () => {
+      const state = useGatewayConnection(coordinator);
+      return createElement(
+        "div",
+        null,
+        createElement("div", { "data-testid": "gatewayUrl" }, state.gatewayUrl),
+        createElement(
+          "button",
+          {
+            type: "button",
+            onClick: () => state.setGatewayUrl("wss://remote-next.example"),
+            "data-testid": "changeUrl",
+          },
+          "change"
+        )
+      );
+    };
+
+    render(createElement(Probe));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("gatewayUrl")).toHaveTextContent("wss://remote.example");
+    });
+    expect(schedulePatch).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByTestId("changeUrl"));
+
+    await waitFor(() => {
+      expect(schedulePatch).toHaveBeenCalled();
+    });
+    expect(schedulePatch).toHaveBeenLastCalledWith(
+      { gateway: { url: "wss://remote-next.example" } },
+      400
+    );
+  });
+
+  it("persists token only after explicit token edit", async () => {
+    const { useGatewayConnection } = await setupAndImportHook(null);
+    const schedulePatch = vi.fn();
+    const coordinator = {
+      loadSettings: async () => null,
+      loadSettingsEnvelope: async () => ({
+        settings: {
+          version: 1,
+          gateway: { url: "wss://remote.example", token: "" },
+          focused: {},
+          avatars: {},
+        },
+        localGatewayDefaults: null,
+      }),
+      schedulePatch,
+      flushPending: async () => {},
+    };
+
+    const Probe = () => {
+      const state = useGatewayConnection(coordinator);
+      return createElement(
+        "div",
+        null,
+        createElement("div", { "data-testid": "gatewayUrl" }, state.gatewayUrl),
+        createElement(
+          "button",
+          {
+            type: "button",
+            onClick: () => state.setToken("manual-token"),
+            "data-testid": "setToken",
+          },
+          "token"
+        )
+      );
+    };
+
+    render(createElement(Probe));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("gatewayUrl")).toHaveTextContent("wss://remote.example");
+    });
+    expect(schedulePatch).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByTestId("setToken"));
+
+    await waitFor(() => {
+      expect(schedulePatch).toHaveBeenCalled();
+    });
+    expect(schedulePatch).toHaveBeenLastCalledWith(
+      { gateway: { url: "wss://remote.example", token: "manual-token" } },
+      400
+    );
   });
 });

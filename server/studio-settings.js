@@ -2,7 +2,6 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 
-const LEGACY_STATE_DIRNAMES = [".clawdbot", ".moltbot"];
 const NEW_STATE_DIRNAME = ".openclaw";
 
 const resolveUserPath = (input) => {
@@ -26,24 +25,11 @@ const resolveDefaultHomeDir = () => {
 };
 
 const resolveStateDir = (env = process.env) => {
-  const override =
-    env.OPENCLAW_STATE_DIR?.trim() ||
-    env.MOLTBOT_STATE_DIR?.trim() ||
-    env.CLAWDBOT_STATE_DIR?.trim();
+  const override = env.OPENCLAW_STATE_DIR?.trim();
   if (override) return resolveUserPath(override);
 
   const home = resolveDefaultHomeDir();
-  const newDir = path.join(home, NEW_STATE_DIRNAME);
-  const legacyDirs = LEGACY_STATE_DIRNAMES.map((dir) => path.join(home, dir));
-  try {
-    if (fs.existsSync(newDir)) return newDir;
-  } catch {}
-  for (const dir of legacyDirs) {
-    try {
-      if (fs.existsSync(dir)) return dir;
-    } catch {}
-  }
-  return newDir;
+  return path.join(home, NEW_STATE_DIRNAME);
 };
 
 const resolveStudioSettingsPath = (env = process.env) => {
@@ -83,8 +69,7 @@ const readOpenclawGatewayDefaults = (env = process.env) => {
 };
 
 const loadUpstreamGatewaySettings = (env = process.env) => {
-  const settingsPath = resolveStudioSettingsPath(env);
-  const parsed = readJsonFile(settingsPath);
+  const parsed = readJsonFile(resolveStudioSettingsPath(env));
   const gateway = parsed && typeof parsed === "object" ? parsed.gateway : null;
   const url = typeof gateway?.url === "string" ? gateway.url.trim() : "";
   const token = typeof gateway?.token === "string" ? gateway.token.trim() : "";
@@ -94,19 +79,16 @@ const loadUpstreamGatewaySettings = (env = process.env) => {
       return {
         url: url || defaults.url,
         token: defaults.token,
-        settingsPath,
       };
     }
   }
   return {
     url: url || DEFAULT_GATEWAY_URL,
     token,
-    settingsPath,
   };
 };
 
 module.exports = {
-  resolveStateDir,
   resolveStudioSettingsPath,
   loadUpstreamGatewaySettings,
 };

@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { PendingExecApproval } from "@/features/agents/approvals/types";
 import {
@@ -12,6 +12,11 @@ import type { ExecApprovalPendingSnapshot } from "@/features/agents/approvals/ex
 import type { AgentState } from "@/features/agents/state/store";
 import { EXEC_APPROVAL_AUTO_RESUME_MARKER } from "@/lib/text/message-extract";
 import type { EventFrame } from "@/lib/gateway/GatewayClient";
+import { postStudioIntent } from "@/lib/controlplane/intents-client";
+
+vi.mock("@/lib/controlplane/intents-client", () => ({
+  postStudioIntent: vi.fn(async () => ({ ok: true })),
+}));
 
 const createAgent = (overrides?: Partial<AgentState>): AgentState => ({
   agentId: "agent-1",
@@ -76,7 +81,20 @@ const createPendingState = (
 });
 
 describe("execApprovalRunControlOperation", () => {
+  const mockedPostStudioIntent = vi.mocked(postStudioIntent);
+
+  afterEach(() => {
+    delete process.env.NEXT_PUBLIC_STUDIO_DOMAIN_API_MODE;
+  });
+
+  it("uses legacy gateway calls when domain mode is disabled", () => {
+    process.env.NEXT_PUBLIC_STUDIO_DOMAIN_API_MODE = "false";
+    expect(process.env.NEXT_PUBLIC_STUDIO_DOMAIN_API_MODE).toBe("false");
+  });
+
   it("pauses a run for pending approval after stale paused-run cleanup", async () => {
+    process.env.NEXT_PUBLIC_STUDIO_DOMAIN_API_MODE = "false";
+    mockedPostStudioIntent.mockReset();
     const call = vi.fn(async () => ({ ok: true }));
     const pausedRunIdByAgentId = new Map<string, string>([
       ["stale-agent", "stale-run"],
@@ -101,6 +119,8 @@ describe("execApprovalRunControlOperation", () => {
   });
 
   it("reverts paused-run map entry when pause abort call fails", async () => {
+    process.env.NEXT_PUBLIC_STUDIO_DOMAIN_API_MODE = "false";
+    mockedPostStudioIntent.mockReset();
     const call = vi.fn(async () => {
       throw new Error("abort failed");
     });
@@ -126,6 +146,8 @@ describe("execApprovalRunControlOperation", () => {
   });
 
   it("auto-resumes in order: dispatch running, wait paused run, then send follow-up", async () => {
+    process.env.NEXT_PUBLIC_STUDIO_DOMAIN_API_MODE = "false";
+    mockedPostStudioIntent.mockReset();
     const call = vi.fn(async (method: string) => {
       if (method === "agent.wait") return { status: "ok" };
       throw new Error(`Unexpected method ${method}`);
@@ -174,6 +196,8 @@ describe("execApprovalRunControlOperation", () => {
   });
 
   it("skips follow-up send when post-wait auto-resume intent no longer holds", async () => {
+    process.env.NEXT_PUBLIC_STUDIO_DOMAIN_API_MODE = "false";
+    mockedPostStudioIntent.mockReset();
     const call = vi.fn(async () => ({ status: "ok" }));
     const dispatch = vi.fn();
     const sendChatMessage = vi.fn(async () => undefined);
@@ -209,6 +233,8 @@ describe("execApprovalRunControlOperation", () => {
   });
 
   it("resolves approvals through resolver and delegates allow flow to auto-resume operation", async () => {
+    process.env.NEXT_PUBLIC_STUDIO_DOMAIN_API_MODE = "false";
+    mockedPostStudioIntent.mockReset();
     const resolveExecApproval = vi.fn(async (params: { onAllowed?: (input: {
       approval: PendingExecApproval;
       targetAgentId: string;
@@ -246,6 +272,8 @@ describe("execApprovalRunControlOperation", () => {
   });
 
   it("executes ingress commands from gateway events", () => {
+    process.env.NEXT_PUBLIC_STUDIO_DOMAIN_API_MODE = "false";
+    mockedPostStudioIntent.mockReset();
     const dispatch = vi.fn();
     const replacePendingState = vi.fn();
     const pauseRunForApproval = vi.fn(async () => undefined);
@@ -293,5 +321,47 @@ describe("execApprovalRunControlOperation", () => {
     });
     expect(replacePendingState).not.toHaveBeenCalled();
     expect(pauseRunForApproval).not.toHaveBeenCalled();
+  });
+
+  it("uses intents for pause and wait in domain mode", async () => {
+    process.env.NEXT_PUBLIC_STUDIO_DOMAIN_API_MODE = "true";
+    mockedPostStudioIntent.mockReset();
+    mockedPostStudioIntent.mockResolvedValue({ ok: true });
+    const call = vi.fn(async () => ({ ok: true }));
+    const pausedRunIdByAgentId = new Map<string, string>();
+
+    await runPauseRunForExecApprovalOperation({
+      status: "connected",
+      client: { call },
+      approval: createApproval("approval-1"),
+      preferredAgentId: "agent-1",
+      getAgents: () => [createAgent({ runId: "run-1" })],
+      pausedRunIdByAgentId,
+      isDisconnectLikeError: () => false,
+      logWarn: vi.fn(),
+    });
+
+    await runExecApprovalAutoResumeOperation({
+      client: { call },
+      dispatch: vi.fn(),
+      approval: createApproval("approval-1"),
+      targetAgentId: "agent-1",
+      getAgents: () => [createAgent({ status: "running", runId: "run-1" })],
+      getPendingState: () => createPendingState(),
+      pausedRunIdByAgentId: new Map([["agent-1", "run-1"]]),
+      isDisconnectLikeError: () => false,
+      logWarn: vi.fn(),
+      sendChatMessage: vi.fn(async () => undefined),
+    });
+
+    expect(mockedPostStudioIntent).toHaveBeenCalledWith("/api/intents/chat-abort", {
+      sessionKey: "agent:agent-1:main",
+    });
+    expect(mockedPostStudioIntent).toHaveBeenCalledWith("/api/intents/agent-wait", {
+      runId: "run-1",
+      timeoutMs: EXEC_APPROVAL_AUTO_RESUME_WAIT_TIMEOUT_MS,
+    });
+    expect(call).not.toHaveBeenCalledWith("chat.abort", expect.anything());
+    expect(call).not.toHaveBeenCalledWith("agent.wait", expect.anything());
   });
 });

@@ -18,6 +18,7 @@ import {
 } from "@/lib/text/message-extract";
 import {
   useGatewayConnection,
+  type GatewayStatus,
 } from "@/lib/gateway/GatewayClient";
 import {
   type GatewayModelChoice,
@@ -113,6 +114,7 @@ import {
   type SettingsRouteTab,
 } from "@/features/agents/operations/settingsRouteWorkflow";
 import { useSettingsRouteController } from "@/features/agents/operations/useSettingsRouteController";
+import { isStudioDomainIntentModeEnabled } from "@/lib/controlplane/domain-mode";
 const PENDING_EXEC_APPROVAL_PRUNE_GRACE_MS = 500;
 
 type MobilePane = "fleet" | "chat";
@@ -218,6 +220,7 @@ const AgentStudioPage = () => {
     gatewayUrl,
     token,
     localGatewayDefaults,
+    domainApiModeEnabled,
     error: gatewayError,
     connect,
     disconnect,
@@ -225,6 +228,9 @@ const AgentStudioPage = () => {
     setGatewayUrl,
     setToken,
   } = useGatewayConnection(settingsCoordinator);
+  const useDomainApiMode = domainApiModeEnabled ?? isStudioDomainIntentModeEnabled();
+  const coreConnected = useDomainApiMode ? true : status === "connected";
+  const coreStatus: GatewayStatus = coreConnected ? "connected" : status;
 
   const { state, dispatch, hydrateAgents, setError, setLoading } = useAgentStore();
   const [showConnectionPanel, setShowConnectionPanel] = useState(false);
@@ -455,7 +461,7 @@ const AgentStudioPage = () => {
   }, [specialLatestUpdate]);
 
   const loadAgents = useCallback(async () => {
-    if (status !== "connected") return;
+    if (!coreConnected) return;
     setLoading(true);
     try {
       const commands = await runStudioBootstrapLoadOperation({
@@ -490,7 +496,7 @@ const AgentStudioPage = () => {
     gatewayUrl,
     gatewayConfigSnapshot,
     settingsCoordinator,
-    status,
+    coreConnected,
   ]);
 
   const enqueueConfigMutationFromRef = useCallback(
@@ -563,7 +569,7 @@ const AgentStudioPage = () => {
     queuedBlockedByRunningAgents,
     activeConfigMutation,
   } = useConfigMutationQueue({
-    status,
+    status: coreStatus,
     hasRunningAgents,
     hasRestartBlockInProgress,
   });
@@ -582,9 +588,9 @@ const AgentStudioPage = () => {
   }, [unscopedPendingExecApprovals]);
 
   useEffect(() => {
-    if (status === "connected") return;
+    if (coreConnected) return;
     setAgentsLoadedOnce(false);
-  }, [gatewayUrl, status]);
+  }, [coreConnected, gatewayUrl]);
 
   useEffect(() => {
     let cancelled = false;
@@ -660,24 +666,24 @@ const AgentStudioPage = () => {
   ]);
 
   useEffect(() => {
-    if (status !== "connected" || !focusedPreferencesLoaded) return;
+    if (!coreConnected || !focusedPreferencesLoaded) return;
     if (restartingMutationBlock && restartingMutationBlock.phase !== "queued") return;
     if (createAgentBlock && createAgentBlock.phase !== "queued") return;
     void loadAgents();
   }, [
+    coreConnected,
     createAgentBlock,
     focusedPreferencesLoaded,
     gatewayUrl,
     loadAgents,
     restartingMutationBlock,
-    status,
   ]);
 
   useEffect(() => {
-    if (status === "disconnected") {
+    if (!coreConnected) {
       setLoading(false);
     }
-  }, [setLoading, status]);
+  }, [coreConnected, setLoading]);
 
   useEffect(() => {
     const nowMs = Date.now();
@@ -743,7 +749,7 @@ const AgentStudioPage = () => {
     clearHistoryInFlight,
   } = useRuntimeSyncController({
     client,
-    status,
+    status: coreStatus,
     agents,
     focusedAgentId,
     focusedAgentRunning,
@@ -766,7 +772,7 @@ const AgentStudioPage = () => {
     clearPendingLivePatch,
   } = useChatInteractionController({
     client,
-    status,
+    status: coreStatus,
     agents,
     dispatch,
     setError,
@@ -806,7 +812,7 @@ const AgentStudioPage = () => {
   } = useSettingsRouteController({
     settingsRouteActive,
     settingsRouteAgentId,
-    status,
+    status: coreStatus,
     agentsLoadedOnce,
     selectedAgentId: state.selectedAgentId,
     focusedAgentId: focusedAgent?.agentId ?? null,
@@ -1185,14 +1191,46 @@ const AgentStudioPage = () => {
       },
     });
     runtimeEventHandlerRef.current = handler;
-    const unsubscribe = client.onEvent((event: EventFrame) => {
-      handler.handleEvent(event);
-      handleGatewayEventIngress(event);
-    });
+    let unsubscribeGatewayEvents: (() => void) | null = null;
+    let stream: EventSource | null = null;
+    if (useDomainApiMode) {
+      stream = new EventSource("/api/runtime/stream");
+      stream.addEventListener("gateway.event", (raw) => {
+        const message = raw as MessageEvent<string>;
+        try {
+          const parsed = JSON.parse(message.data) as {
+            event?: string;
+            payload?: unknown;
+            seq?: number;
+          };
+          if (typeof parsed.event !== "string") return;
+          const frame: EventFrame = {
+            type: "event",
+            event: parsed.event,
+            payload: parsed.payload,
+            ...(typeof parsed.seq === "number" ? { seq: parsed.seq } : {}),
+          };
+          handler.handleEvent(frame);
+          handleGatewayEventIngress(frame);
+        } catch {}
+      });
+      stream.addEventListener("runtime.status", () => {
+        void loadSummarySnapshot();
+      });
+      stream.onerror = () => {
+        // EventSource performs automatic reconnect; keep warning low-noise.
+      };
+    } else {
+      unsubscribeGatewayEvents = client.onEvent((event: EventFrame) => {
+        handler.handleEvent(event);
+        handleGatewayEventIngress(event);
+      });
+    }
     return () => {
       runtimeEventHandlerRef.current = null;
       handler.dispose();
-      unsubscribe();
+      unsubscribeGatewayEvents?.();
+      stream?.close();
     };
   }, [
     client,
@@ -1204,6 +1242,7 @@ const AgentStudioPage = () => {
     refreshHeartbeatLatestUpdate,
     specialLatestUpdate,
     handleGatewayEventIngress,
+    useDomainApiMode,
     status,
   ]);
 
@@ -1227,7 +1266,7 @@ const AgentStudioPage = () => {
     : queuedConfigMutationCount > 0
       ? queuedBlockedByRunningAgents
         ? `Queued ${queuedConfigMutationCount} config change${queuedConfigMutationCount === 1 ? "" : "s"}; waiting for ${runningAgentCount} running agent${runningAgentCount === 1 ? "" : "s"} to finish`
-        : status !== "connected"
+        : !coreConnected
           ? `Queued ${queuedConfigMutationCount} config change${queuedConfigMutationCount === 1 ? "" : "s"}; waiting for gateway connection`
           : `Queued ${queuedConfigMutationCount} config change${queuedConfigMutationCount === 1 ? "" : "s"}`
       : null;
@@ -1292,7 +1331,7 @@ const AgentStudioPage = () => {
     );
   }
 
-  if (status === "disconnected" && !agentsLoadedOnce && didAttemptGatewayConnect) {
+  if (!coreConnected && status === "disconnected" && !agentsLoadedOnce && didAttemptGatewayConnect) {
     return (
       <div className="relative min-h-screen w-screen overflow-hidden bg-background">
         <div className="relative z-10 flex h-screen flex-col">
@@ -1329,7 +1368,7 @@ const AgentStudioPage = () => {
     );
   }
 
-  if (status === "connected" && !agentsLoadedOnce) {
+  if (coreConnected && !agentsLoadedOnce) {
     return (
       <div className="relative min-h-screen w-screen overflow-hidden bg-background">
         <div className="flex min-h-screen items-center justify-center px-6">
@@ -1500,12 +1539,6 @@ const AgentStudioPage = () => {
                               settingsMutationController.handleDeleteAgent(inspectSidebarAgent.agentId)
                             }
                             canDelete={inspectSidebarAgent.agentId !== RESERVED_MAIN_AGENT_ID}
-                            onToolCallingToggle={(enabled) =>
-                              handleToolCallingToggle(inspectSidebarAgent.agentId, enabled)
-                            }
-                            onThinkingTracesToggle={(enabled) =>
-                              handleThinkingTracesToggle(inspectSidebarAgent.agentId, enabled)
-                            }
                             skillsReport={settingsMutationController.settingsSkillsReport}
                             skillsLoading={settingsMutationController.settingsSkillsLoading}
                             skillsError={settingsMutationController.settingsSkillsError}
@@ -1621,7 +1654,7 @@ const AgentStudioPage = () => {
                   onCreateAgent={() => {
                     handleOpenCreateAgentModal();
                   }}
-                  createDisabled={status !== "connected" || createAgentBusy || state.loading}
+                  createDisabled={!coreConnected || createAgentBusy || state.loading}
                   createBusy={createAgentBusy}
                   onSelectAgent={handleFleetSelectAgent}
                 />
@@ -1636,7 +1669,7 @@ const AgentStudioPage = () => {
                       <AgentChatPanel
                         agent={focusedAgent}
                         isSelected={false}
-                        canSend={status === "connected"}
+                        canSend={coreConnected}
                         models={gatewayModels}
                         stopBusy={stopBusyAgentId === focusedAgent.agentId}
                         stopDisabledReason={focusedAgentStopDisabledReason}
@@ -1680,7 +1713,7 @@ const AgentStudioPage = () => {
                     description={
                       hasAnyAgents
                         ? undefined
-                        : status === "connected"
+                        : coreConnected
                           ? "Use New Agent in the sidebar to add your first agent."
                           : "Connect to your gateway to load agents into the studio."
                     }

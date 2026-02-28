@@ -3,9 +3,13 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { AgentStoreSeed } from "@/features/agents/state/store";
 import type { GatewayModelPolicySnapshot } from "@/lib/gateway/models";
 import type { StudioSettingsPatch } from "@/lib/studio/settings";
+import { fetchJson } from "@/lib/http";
 
 vi.mock("@/features/agents/operations/agentFleetHydration", () => ({
   hydrateAgentFleetFromGateway: vi.fn(),
+}));
+vi.mock("@/lib/http", () => ({
+  fetchJson: vi.fn(),
 }));
 
 import { hydrateAgentFleetFromGateway } from "@/features/agents/operations/agentFleetHydration";
@@ -21,10 +25,13 @@ import {
 } from "@/features/agents/operations/studioBootstrapOperation";
 
 const hydrateAgentFleetFromGatewayMock = vi.mocked(hydrateAgentFleetFromGateway);
+const fetchJsonMock = vi.mocked(fetchJson);
 
 describe("studioBootstrapOperation", () => {
   beforeEach(() => {
     hydrateAgentFleetFromGatewayMock.mockReset();
+    fetchJsonMock.mockReset();
+    process.env.NEXT_PUBLIC_STUDIO_DOMAIN_API_MODE = "false";
   });
 
   it("builds bootstrap commands from hydrated fleet result", async () => {
@@ -94,6 +101,44 @@ describe("studioBootstrapOperation", () => {
     });
 
     expect(commands).toEqual([{ kind: "set-error", message: "load failed" }]);
+  });
+
+  it("uses runtime fleet API in domain mode", async () => {
+    process.env.NEXT_PUBLIC_STUDIO_DOMAIN_API_MODE = "true";
+    const seeds: AgentStoreSeed[] = [{ agentId: "agent-1", name: "Agent One", sessionKey: "s1" }];
+    fetchJsonMock.mockResolvedValue({
+      result: {
+        seeds,
+        sessionCreatedAgentIds: [],
+        sessionSettingsSyncedAgentIds: [],
+        summaryPatches: [],
+        suggestedSelectedAgentId: "agent-1",
+        configSnapshot: null,
+      },
+    });
+
+    const commands = await runStudioBootstrapLoadOperation({
+      client: { call: async () => null },
+      gatewayUrl: "https://gateway.test",
+      cachedConfigSnapshot: null,
+      loadStudioSettings: async () => null,
+      isDisconnectLikeError: () => false,
+      preferredSelectedAgentId: null,
+      hasCurrentSelection: false,
+    });
+
+    expect(fetchJsonMock).toHaveBeenCalledWith(
+      "/api/runtime/fleet",
+      expect.objectContaining({ method: "POST" })
+    );
+    expect(hydrateAgentFleetFromGatewayMock).not.toHaveBeenCalled();
+    expect(commands).toEqual([
+      {
+        kind: "hydrate-agents",
+        seeds,
+        initialSelectedAgentId: "agent-1",
+      },
+    ]);
   });
 
   it("executes bootstrap commands with injected callbacks", () => {

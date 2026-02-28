@@ -11,6 +11,8 @@ import { sendChatMessageViaStudio } from "@/features/agents/operations/chatSendO
 import { mergePendingLivePatch } from "@/features/agents/state/livePatchQueue";
 import { buildNewSessionAgentPatch, type AgentState } from "@/features/agents/state/store";
 import type { GatewayStatus } from "@/lib/gateway/GatewayClient";
+import { isStudioDomainIntentModeEnabled } from "@/lib/controlplane/domain-mode";
+import { postStudioIntent } from "@/lib/controlplane/intents-client";
 
 type ChatInteractionDispatchAction =
   | { type: "updateAgent"; agentId: string; patch: Partial<AgentState> }
@@ -54,6 +56,7 @@ export type ChatInteractionController = {
 export function useChatInteractionController(
   params: UseChatInteractionControllerParams
 ): ChatInteractionController {
+  const useDomainIntents = isStudioDomainIntentModeEnabled();
   const [stopBusyAgentId, setStopBusyAgentId] = useState<string | null>(null);
   const stopBusyAgentIdRef = useRef<string | null>(stopBusyAgentId);
   const pendingDraftValuesRef = useRef<Map<string, string>>(new Map());
@@ -308,9 +311,13 @@ export function useChatInteractionController(
       setStopBusyAgentId(agentId);
       stopBusyAgentIdRef.current = agentId;
       try {
-        await params.client.call("chat.abort", {
-          sessionKey: stopIntent.sessionKey,
-        });
+        if (useDomainIntents) {
+          await postStudioIntent("/api/intents/chat-abort", { sessionKey: stopIntent.sessionKey });
+        } else {
+          await params.client.call("chat.abort", {
+            sessionKey: stopIntent.sessionKey,
+          });
+        }
       } catch (err) {
         const message = err instanceof Error ? err.message : "Failed to stop run.";
         params.setError(message);
@@ -328,7 +335,7 @@ export function useChatInteractionController(
         });
       }
     },
-    [params]
+    [params, useDomainIntents]
   );
 
   const handleNewSession = useCallback(
@@ -348,7 +355,11 @@ export function useChatInteractionController(
         if (newSessionIntent.kind === "deny") {
           throw new Error(newSessionIntent.message);
         }
-        await params.client.call("sessions.reset", { key: newSessionIntent.sessionKey });
+        if (useDomainIntents) {
+          await postStudioIntent("/api/intents/sessions-reset", { key: newSessionIntent.sessionKey });
+        } else {
+          await params.client.call("sessions.reset", { key: newSessionIntent.sessionKey });
+        }
         const patch = buildNewSessionAgentPatch(agent);
         params.clearRunTracking(agent.runId);
         params.clearHistoryInFlight(newSessionIntent.sessionKey);
@@ -371,7 +382,7 @@ export function useChatInteractionController(
         });
       }
     },
-    [params]
+    [params, useDomainIntents]
   );
 
   return {

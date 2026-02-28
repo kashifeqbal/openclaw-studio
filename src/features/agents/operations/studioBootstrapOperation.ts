@@ -6,6 +6,8 @@ import {
   planFocusedSelectionPatch,
 } from "@/features/agents/operations/studioBootstrapWorkflow";
 import type { AgentState, AgentStoreSeed, FocusFilter } from "@/features/agents/state/store";
+import { isStudioDomainIntentModeEnabled } from "@/lib/controlplane/domain-mode";
+import { fetchJson } from "@/lib/http";
 import type { GatewayModelPolicySnapshot } from "@/lib/gateway/models";
 import type { StudioSettings, StudioSettingsPatch } from "@/lib/studio/settings";
 
@@ -31,14 +33,26 @@ export async function runStudioBootstrapLoadOperation(params: {
   logError?: (message: string, error: unknown) => void;
 }): Promise<StudioBootstrapLoadCommand[]> {
   try {
-    const result = await hydrateAgentFleetFromGateway({
-      client: params.client,
-      gatewayUrl: params.gatewayUrl,
-      cachedConfigSnapshot: params.cachedConfigSnapshot,
-      loadStudioSettings: params.loadStudioSettings,
-      isDisconnectLikeError: params.isDisconnectLikeError,
-      logError: params.logError,
-    });
+    const result = isStudioDomainIntentModeEnabled()
+      ? (
+          await fetchJson<{ result: Awaited<ReturnType<typeof hydrateAgentFleetFromGateway>> }>(
+            "/api/runtime/fleet",
+            {
+              method: "POST",
+              cache: "no-store",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ cachedConfigSnapshot: params.cachedConfigSnapshot }),
+            }
+          )
+        ).result
+      : await hydrateAgentFleetFromGateway({
+          client: params.client,
+          gatewayUrl: params.gatewayUrl,
+          cachedConfigSnapshot: params.cachedConfigSnapshot,
+          loadStudioSettings: params.loadStudioSettings,
+          isDisconnectLikeError: params.isDisconnectLikeError,
+          logError: params.logError,
+        });
 
     const selectionIntent = planBootstrapSelection({
       hasCurrentSelection: params.hasCurrentSelection,

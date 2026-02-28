@@ -14,6 +14,8 @@ import {
 } from "@/features/agents/approvals/execApprovalRunControlWorkflow";
 import { sendChatMessageViaStudio } from "@/features/agents/operations/chatSendOperation";
 import type { AgentState } from "@/features/agents/state/store";
+import { isStudioDomainIntentModeEnabled } from "@/lib/controlplane/domain-mode";
+import { postStudioIntent } from "@/lib/controlplane/intents-client";
 import type { EventFrame } from "@/lib/gateway/GatewayClient";
 import { EXEC_APPROVAL_AUTO_RESUME_MARKER } from "@/lib/text/message-extract";
 
@@ -44,6 +46,7 @@ export async function runPauseRunForExecApprovalOperation(params: {
   logWarn?: (message: string, error: unknown) => void;
 }): Promise<void> {
   if (params.status !== "connected") return;
+  const useDomainIntents = isStudioDomainIntentModeEnabled();
 
   const plan = planPauseRunControl({
     approval: params.approval,
@@ -60,9 +63,15 @@ export async function runPauseRunForExecApprovalOperation(params: {
 
   params.pausedRunIdByAgentId.set(plan.pauseIntent.agentId, plan.pauseIntent.runId);
   try {
-    await params.client.call("chat.abort", {
-      sessionKey: plan.pauseIntent.sessionKey,
-    });
+    if (useDomainIntents) {
+      await postStudioIntent("/api/intents/chat-abort", {
+        sessionKey: plan.pauseIntent.sessionKey,
+      });
+    } else {
+      await params.client.call("chat.abort", {
+        sessionKey: plan.pauseIntent.sessionKey,
+      });
+    }
   } catch (error) {
     params.pausedRunIdByAgentId.delete(plan.pauseIntent.agentId);
     if (!params.isDisconnectLikeError(error)) {
@@ -88,6 +97,7 @@ export async function runExecApprovalAutoResumeOperation(params: {
   sendChatMessage?: typeof sendChatMessageViaStudio;
   now?: () => number;
 }): Promise<void> {
+  const useDomainIntents = isStudioDomainIntentModeEnabled();
   const sendChatMessage = params.sendChatMessage ?? sendChatMessageViaStudio;
   const pendingState = params.getPendingState();
   const prePlan = planAutoResumeRunControl({
@@ -114,10 +124,17 @@ export async function runExecApprovalAutoResumeOperation(params: {
   });
 
   try {
-    await params.client.call("agent.wait", {
-      runId: preWaitIntent.pausedRunId,
-      timeoutMs: EXEC_APPROVAL_AUTO_RESUME_WAIT_TIMEOUT_MS,
-    });
+    if (useDomainIntents) {
+      await postStudioIntent("/api/intents/agent-wait", {
+        runId: preWaitIntent.pausedRunId,
+        timeoutMs: EXEC_APPROVAL_AUTO_RESUME_WAIT_TIMEOUT_MS,
+      });
+    } else {
+      await params.client.call("agent.wait", {
+        runId: preWaitIntent.pausedRunId,
+        timeoutMs: EXEC_APPROVAL_AUTO_RESUME_WAIT_TIMEOUT_MS,
+      });
+    }
   } catch (error) {
     if (!params.isDisconnectLikeError(error)) {
       (params.logWarn ?? ((message, err) => console.warn(message, err)))(
@@ -200,7 +217,7 @@ export async function runResolveExecApprovalOperation(params: {
   });
 }
 
-export function executeExecApprovalIngressCommands(params: {
+function executeExecApprovalIngressCommands(params: {
   commands: ExecApprovalIngressCommand[];
   replacePendingState: (nextPendingState: ExecApprovalPendingSnapshot) => void;
   pauseRunForApproval: (

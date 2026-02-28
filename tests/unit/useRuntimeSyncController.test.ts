@@ -181,6 +181,7 @@ describe("useRuntimeSyncController", () => {
 
   beforeEach(() => {
     vi.useFakeTimers();
+    process.env.NEXT_PUBLIC_STUDIO_DOMAIN_API_MODE = "false";
     mockedRunHistorySyncOperation.mockReset();
     mockedRunHistorySyncOperation.mockResolvedValue([]);
     mockedExecuteHistorySyncCommands.mockReset();
@@ -192,6 +193,7 @@ describe("useRuntimeSyncController", () => {
   afterEach(() => {
     vi.useRealTimers();
     vi.restoreAllMocks();
+    delete process.env.NEXT_PUBLIC_STUDIO_DOMAIN_API_MODE;
   });
 
   it("runs reconcile immediately and every 3000ms while connected then cleans up", async () => {
@@ -364,5 +366,51 @@ describe("useRuntimeSyncController", () => {
     });
 
     expect(inFlightSeen).toEqual([false, true, false]);
+  });
+
+  it("uses domain runtime APIs when NEXT_PUBLIC_STUDIO_DOMAIN_API_MODE is enabled", async () => {
+    process.env.NEXT_PUBLIC_STUDIO_DOMAIN_API_MODE = "true";
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes("/api/runtime/summary")) {
+        return new Response(
+          JSON.stringify({
+            enabled: true,
+            summary: { status: "connected", reason: null, asOf: null, outboxHead: 0 },
+            freshness: { source: "controlplane", stale: false, asOf: null, reason: null },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } }
+        );
+      }
+      if (url.includes("/api/runtime/agents/")) {
+        return new Response(JSON.stringify({ enabled: true, entries: [] }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+      return new Response(JSON.stringify({}), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const ctx = renderController({
+      focusedAgentId: "agent-1",
+      focusedAgentRunning: true,
+    });
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith("/api/runtime/summary", expect.anything());
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining("/api/runtime/agents/agent-1/history"),
+      expect.anything()
+    );
+    expect(ctx.call).not.toHaveBeenCalledWith("status", {});
+    vi.unstubAllGlobals();
+    ctx.unmount();
   });
 });

@@ -5,6 +5,8 @@ import {
   upsertGatewayAgentExecApprovals,
 } from "@/lib/gateway/execApprovals";
 import { readConfigAgentList, updateGatewayAgentOverrides } from "@/lib/gateway/agentConfig";
+import { isStudioDomainIntentModeEnabled } from "@/lib/controlplane/domain-mode";
+import { postStudioIntent } from "@/lib/controlplane/intents-client";
 
 export type ExecutionRoleId = "conservative" | "collaborative" | "autonomous";
 export type CommandModeId = "off" | "ask" | "auto";
@@ -76,18 +78,6 @@ export const resolvePresetDefaultsForRole = (role: ExecutionRoleId): AgentPermis
     webAccess: true,
     fileTools: true,
   };
-};
-
-export const resolveEffectivePermissionsSummary = (draft: AgentPermissionsDraft): string => {
-  const commandLabel =
-    draft.commandMode === "auto"
-      ? "Commands: Auto"
-      : draft.commandMode === "ask"
-      ? "Commands: Ask"
-      : "Commands: Off";
-  const webLabel = draft.webAccess ? "Web: On" : "Web: Off";
-  const fileLabel = draft.fileTools ? "File tools: On" : "File tools: Off";
-  return `${commandLabel} | ${webLabel} | ${fileLabel}`;
 };
 
 export const isPermissionsCustom = (params: {
@@ -303,7 +293,16 @@ const upsertExecApprovalsPolicyForRole = async (params: {
   client: GatewayClient;
   agentId: string;
   role: ExecutionRoleId;
+  useDomainIntents?: boolean;
 }) => {
+  const useDomainIntents = params.useDomainIntents ?? isStudioDomainIntentModeEnabled();
+  if (useDomainIntents) {
+    await postStudioIntent("/api/intents/exec-approvals-set", {
+      agentId: params.agentId,
+      role: params.role,
+    });
+    return;
+  }
   const existingPolicy = await readGatewayAgentExecApprovals({
     client: params.client,
     agentId: params.agentId,
@@ -324,6 +323,7 @@ export async function updateAgentPermissionsViaStudio(params: {
   sessionKey: string;
   draft: AgentPermissionsDraft;
   loadAgents?: () => Promise<void>;
+  useDomainIntents?: boolean;
 }): Promise<void> {
   const agentId = params.agentId.trim();
   if (!agentId) {
@@ -335,6 +335,7 @@ export async function updateAgentPermissionsViaStudio(params: {
     client: params.client,
     agentId,
     role,
+    useDomainIntents: params.useDomainIntents,
   });
   const runtimeConfigContext = await resolveAgentRuntimeConfigContext({
     client: params.client,
@@ -377,6 +378,7 @@ export async function updateExecutionRoleViaStudio(params: {
   sessionKey: string;
   role: ExecutionRoleId;
   loadAgents: () => Promise<void>;
+  useDomainIntents?: boolean;
 }): Promise<void> {
   const agentId = params.agentId.trim();
   if (!agentId) {
@@ -387,6 +389,7 @@ export async function updateExecutionRoleViaStudio(params: {
     client: params.client,
     agentId,
     role: params.role,
+    useDomainIntents: params.useDomainIntents,
   });
   const runtimeConfigContext = await resolveAgentRuntimeConfigContext({
     client: params.client,

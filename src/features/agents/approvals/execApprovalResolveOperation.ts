@@ -5,6 +5,8 @@ import {
   updatePendingApprovalById,
 } from "@/features/agents/approvals/pendingStore";
 import { shouldTreatExecApprovalResolveErrorAsUnknownId } from "@/features/agents/approvals/execApprovalLifecycleWorkflow";
+import { isStudioDomainIntentModeEnabled } from "@/lib/controlplane/domain-mode";
+import { postStudioIntent } from "@/lib/controlplane/intents-client";
 
 type GatewayClientLike = {
   call: (method: string, params: unknown) => Promise<unknown>;
@@ -33,9 +35,11 @@ export const resolveExecApprovalViaStudio = async (params: {
   isDisconnectLikeError: (error: unknown) => boolean;
   shouldTreatUnknownId?: (error: unknown) => boolean;
   logWarn?: (message: string, error: unknown) => void;
+  useDomainIntents?: boolean;
 }): Promise<void> => {
   const id = params.approvalId.trim();
   if (!id) return;
+  const useDomainIntents = params.useDomainIntents ?? isStudioDomainIntentModeEnabled();
 
   const resolvePendingApproval = (
     approvalId: string,
@@ -114,7 +118,11 @@ export const resolveExecApprovalViaStudio = async (params: {
   setLocalApprovalState(true, null);
 
   try {
-    await params.client.call("exec.approval.resolve", { id, decision: params.decision });
+    if (useDomainIntents) {
+      await postStudioIntent("/api/intents/exec-approval-resolve", { id, decision: params.decision });
+    } else {
+      await params.client.call("exec.approval.resolve", { id, decision: params.decision });
+    }
     removeLocalApproval(id);
 
     if (params.decision !== "allow-once" && params.decision !== "allow-always") {

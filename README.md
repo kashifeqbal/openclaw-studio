@@ -97,7 +97,7 @@ npm run dev
 ## Configuration
 
 Paths and key settings:
-- OpenClaw config: `~/.openclaw/openclaw.json` (or `OPENCLAW_CONFIG_PATH` / `OPENCLAW_STATE_DIR`)
+- OpenClaw config: `~/.openclaw/openclaw.json` (or via `OPENCLAW_STATE_DIR`)
 - Studio settings: `~/.openclaw/openclaw-studio/settings.json`
 - Default gateway URL: `ws://localhost:18789` (override via Studio Settings or `NEXT_PUBLIC_GATEWAY_URL`)
 - `STUDIO_ACCESS_TOKEN`: required when binding Studio to a public host (`HOST=0.0.0.0`, `HOST=::`, or non-loopback hostnames/IPs); optional for loopback-only binds (`127.0.0.1`, `::1`, `localhost`)

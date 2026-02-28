@@ -27,10 +27,10 @@ Non-scope:
 Studio vendors the browser Gateway client used to speak the Gateway protocol:
 - Vendored client: `src/lib/gateway/openclaw/GatewayBrowserClient.ts`
 - Sync script: `scripts/sync-openclaw-gateway-client.ts`
-- Current sync source path used by that script: `~/clawdbot/ui/src/ui/gateway.ts`
+- Current sync source path used by that script: `~/openclaw/ui/src/ui/gateway.ts`
 
 Important:
-- Studio does not currently sync `GatewayBrowserClient.ts` directly from `~/openclaw`.
+- Studio syncs `GatewayBrowserClient.ts` from `~/openclaw` via the sync script above.
 - If protocol mismatch is suspected, first verify the sync source file and the upstream Gateway runtime/protocol files are aligned.
 
 If a protocol mismatch is suspected (missing event fields, renamed streams, different error codes), start by checking whether Studio’s vendored client is in sync with the Gateway version you’re running.

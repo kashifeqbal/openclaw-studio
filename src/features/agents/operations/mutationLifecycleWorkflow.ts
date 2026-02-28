@@ -416,13 +416,6 @@ export const resolveConfigMutationStatusLine = (params: {
     : "Gateway restart in progress";
 };
 
-export const buildAwaitingRestartPatch = (): AwaitingRestartPatch => {
-  return {
-    phase: "awaiting-restart",
-    sawDisconnect: false,
-  };
-};
-
 export const resolveConfigMutationPostRunEffects = (
   result: MutationWorkflowResult
 ): MutationWorkflowPostRunEffects => {

@@ -36,6 +36,8 @@ import {
   updateGatewayAgentSkillsAllowlist,
 } from "@/lib/gateway/agentConfig";
 import { fetchJson } from "@/lib/http";
+import { isStudioDomainIntentModeEnabled } from "@/lib/controlplane/domain-mode";
+import { postStudioIntent } from "@/lib/controlplane/intents-client";
 import { canRemoveSkillSource, filterOsCompatibleSkills } from "@/lib/skills/presentation";
 import { removeSkillFromGateway } from "@/lib/skills/remove";
 import {
@@ -78,6 +80,7 @@ export type UseAgentSettingsMutationControllerParams = {
 };
 
 export function useAgentSettingsMutationController(params: UseAgentSettingsMutationControllerParams) {
+  const useDomainIntents = isStudioDomainIntentModeEnabled();
   const skillsLoadRequestIdRef = useRef(0);
   const [settingsSkillsReport, setSettingsSkillsReport] = useState<SkillStatusReport | null>(null);
   const [settingsSkillsLoading, setSettingsSkillsLoading] = useState(false);
@@ -107,7 +110,7 @@ export function useAgentSettingsMutationController(params: UseAgentSettingsMutat
 
   const mutationContext: AgentSettingsMutationContext = useMemo(
     () => ({
-      status: params.status,
+      status: useDomainIntents ? "connected" : params.status,
       hasCreateBlock: params.hasCreateBlock,
       hasRenameBlock: hasRenameMutationBlock,
       hasDeleteBlock: hasDeleteMutationBlock,
@@ -123,6 +126,7 @@ export function useAgentSettingsMutationController(params: UseAgentSettingsMutat
       hasRenameMutationBlock,
       params.hasCreateBlock,
       params.status,
+      useDomainIntents,
     ]
   );
 
@@ -455,12 +459,13 @@ export function useAgentSettingsMutationController(params: UseAgentSettingsMutat
             agentId: decision.normalizedAgentId,
             fetchJson,
             logError: (message, error) => console.error(message, error),
+            useDomainIntents,
           });
           params.clearInspectSidebar();
         },
       });
     },
-    [mutationContext, params, runRestartingMutationLifecycle]
+    [mutationContext, params, runRestartingMutationLifecycle, useDomainIntents]
   );
 
   const handleCreateCronJob = useCallback(
@@ -587,16 +592,23 @@ export function useAgentSettingsMutationController(params: UseAgentSettingsMutat
         agentName: name,
         label: `Rename ${agent.name}`,
         executeMutation: async () => {
-          await renameGatewayAgent({
-            client: params.client,
-            agentId: decision.normalizedAgentId,
-            name,
-          });
+          if (useDomainIntents) {
+            await postStudioIntent("/api/intents/agent-rename", {
+              agentId: decision.normalizedAgentId,
+              name,
+            });
+          } else {
+            await renameGatewayAgent({
+              client: params.client,
+              agentId: decision.normalizedAgentId,
+              name,
+            });
+          }
           params.dispatchUpdateAgent(decision.normalizedAgentId, { name });
         },
       });
     },
-    [mutationContext, params, runRestartingMutationLifecycle]
+    [mutationContext, params, runRestartingMutationLifecycle, useDomainIntents]
   );
 
   const handleUpdateAgentPermissions = useCallback(
@@ -625,6 +637,7 @@ export function useAgentSettingsMutationController(params: UseAgentSettingsMutat
             sessionKey: agent.sessionKey,
             draft,
             loadAgents: async () => {},
+            useDomainIntents,
           });
           await params.loadAgents();
           await params.refreshGatewayConfigSnapshot();

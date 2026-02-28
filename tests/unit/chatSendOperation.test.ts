@@ -141,6 +141,43 @@ describe("sendChatMessageViaStudio", () => {
     });
   });
 
+  it("uses chat-send intent in domain mode", async () => {
+    const agent = createAgent({ sessionSettingsSynced: true, sessionCreated: true });
+    const dispatch = vi.fn();
+    const call = vi.fn(async (method: string) => {
+      if (method === "chat.send") {
+        throw new Error("chat.send should not be called in domain mode");
+      }
+      return { ok: true };
+    });
+    const fetchMock = vi.fn(async () =>
+      new Response(JSON.stringify({ ok: true, payload: { runId: "run-1", status: "started" } }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      })
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await sendChatMessageViaStudio({
+      client: { call },
+      dispatch,
+      getAgent: () => agent,
+      agentId: agent.agentId,
+      sessionKey: agent.sessionKey,
+      message: "hello",
+      now: () => 1234,
+      generateRunId: () => "run-1",
+      useDomainIntents: true,
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/intents/chat-send",
+      expect.objectContaining({ method: "POST" })
+    );
+    expect(call).not.toHaveBeenCalledWith("chat.send", expect.anything());
+    vi.unstubAllGlobals();
+  });
+
   it("continues_send_when_webchat_patch_is_blocked", async () => {
     const agent = createAgent({ sessionSettingsSynced: false, sessionCreated: false });
     const dispatch = vi.fn();

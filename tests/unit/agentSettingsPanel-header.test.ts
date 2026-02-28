@@ -50,8 +50,6 @@ describe("AgentSettingsPanel header", () => {
         agent: createAgent(),
         onClose: vi.fn(),
         onDelete: vi.fn(),
-        onToolCallingToggle: vi.fn(),
-        onThinkingTracesToggle: vi.fn(),
         cronJobs: [],
         cronLoading: false,
         cronError: null,

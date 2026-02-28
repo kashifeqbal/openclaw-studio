@@ -51,7 +51,7 @@ This keeps feature cohesion high while preserving a clear client/server boundary
 
 ## Data flow & key boundaries
 ### 1) Studio settings + focused preferences
-- **Source of truth**: JSON settings file at `~/.openclaw/openclaw-studio/settings.json` (resolved via `resolveStateDir`, with legacy fallbacks in `src/lib/clawdbot/paths.ts`). Settings store the gateway URL/token plus per-gateway focused preferences.
+- **Source of truth**: JSON settings file at `~/.openclaw/openclaw-studio/settings.json` (resolved via `resolveStateDir` in `src/lib/clawdbot/paths.ts`). Settings store the gateway URL/token plus per-gateway focused preferences.
 - **Server boundary**: `src/app/api/studio/route.ts` loads/saves settings by reading and writing `openclaw-studio/settings.json` under the resolved state dir.
 - **Client boundary**: `useGatewayConnection` and focused/session flows in `src/app/page.tsx` use a shared `StudioSettingsCoordinator` to load settings and coalesce debounced `/api/studio` patch writes.
 
@@ -98,7 +98,7 @@ Flow:
 - **Transport boundary**: `syncGatewaySessionSettings` in `src/lib/gateway/GatewayClient.ts` is the only client-side builder/invoker for `sessions.patch` payloads.
 
 ## Cross-cutting concerns
-- **Configuration**: environment variables are read directly from `process.env`. The browser uses `NEXT_PUBLIC_GATEWAY_URL` only as a default upstream URL when Studio settings are missing; the Studio server persists upstream URL/token in `<state dir>/openclaw-studio/settings.json` and the WS proxy loads them via `server/studio-settings.js`. State/config path resolution lives in `lib/clawdbot/paths.ts`, honoring `OPENCLAW_STATE_DIR`/`OPENCLAW_CONFIG_PATH` with legacy fallbacks. When Studio token is missing, settings loaders can fall back to token/port from `<state dir>/openclaw.json`. Loopback-IP gateway URLs are normalized to `localhost` in Studio settings, and the WS proxy rewrites loopback upstream origins to `localhost` for control-UI secure-context compatibility. The optional Studio access gate is enabled by `STUDIO_ACCESS_TOKEN` (`server/access-gate.js`).
+- **Configuration**: environment variables are read directly from `process.env`. The browser uses `NEXT_PUBLIC_GATEWAY_URL` only as a default upstream URL when Studio settings are missing; the Studio server persists upstream URL/token in `<state dir>/openclaw-studio/settings.json` and the WS proxy loads them via `server/studio-settings.js`. State path resolution lives in `lib/clawdbot/paths.ts`, honoring `OPENCLAW_STATE_DIR`. When Studio token is missing, settings loaders can fall back to token/port from `<state dir>/openclaw.json`. Loopback-IP gateway URLs are normalized to `localhost` in Studio settings, and the WS proxy rewrites loopback upstream origins to `localhost` for control-UI secure-context compatibility. The optional Studio access gate is enabled by `STUDIO_ACCESS_TOKEN` (`server/access-gate.js`).
 - **Testing**: Playwright e2e runs Studio with an isolated `OPENCLAW_STATE_DIR` so the Studio WS proxy does not read real upstream gateway settings from the developer machine.
 - **Logging**: API routes and the gateway client use built-in `console.*` logging.
 - **Error handling**:
@@ -108,7 +108,7 @@ Flow:
   - Gateway connect failures with `INVALID_REQUEST: invalid config` surface a doctor hint in Studio (`npx openclaw doctor --fix` / `pnpm openclaw doctor --fix`).
   - Gateway connect failures that close with `connect failed: <CODE> ...` are preserved as `GatewayResponseError` codes so auto-retry gating can be code-driven (instead of message-driven).
   - Gateway browser client truncates close reasons to WebSocket protocol limits (123 UTF-8 bytes) to avoid client-side close exceptions on long error messages.
-- **Filesystem helpers**: server-only filesystem operations live at the API route boundaries. Home-scoped path autocomplete is implemented directly in `src/app/api/path-suggestions/route.ts`. These helpers are used for local settings and path suggestions, not for agent file edits.
+- **Filesystem helpers**: server-only filesystem operations live at the API route boundaries. These helpers are used for local settings and gateway-adjacent file operations, not for agent file edits.
 - **Remote gateway tools over SSH**: some server routes execute small scripts on the gateway host (for example agent-state operations and remote media reads). Shared helpers in `src/lib/ssh/gateway-host.ts` own SSH invocation and JSON parsing so routes do not hand-roll `spawnSync` error handling.
 - **Tracing**: `src/instrumentation.ts` registers `@vercel/otel` for telemetry.
 - **Validation**: request payload validation in API routes and typed client/server helpers in `src/lib/*`.
@@ -159,12 +159,12 @@ C4Container
 
   Container_Boundary(app, "Next.js App") {
     Container(client, "Client UI", "React", "Focused agent-management UI, state, gateway client")
-    Container(api, "API Routes", "Next.js route handlers", "Studio settings, path suggestions, gateway-host state tools")
+    Container(api, "API Routes", "Next.js route handlers", "Studio settings and gateway-host state tools")
     Container(proxy, "WS Proxy", "Custom Node server", "Bridges /api/gateway/ws to upstream gateway with token injection")
   }
 
   Container_Ext(gateway, "Gateway", "WebSocket", "Agent runtime")
-  Container_Ext(fs, "Filesystem", "Local", "settings.json and other local reads (e.g. path suggestions)")
+  Container_Ext(fs, "Filesystem", "Local", "settings.json and other local reads")
 
   Rel(user, client, "Uses")
   Rel(client, api, "HTTP JSON")

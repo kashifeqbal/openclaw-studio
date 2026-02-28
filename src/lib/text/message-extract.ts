@@ -373,7 +373,7 @@ const formatToolResultMeta = (details?: Record<string, unknown> | null, isError?
   return parts.length ? parts.join(" · ") : "";
 };
 
-export const extractToolCalls = (message: unknown): ToolCallRecord[] => {
+const extractToolCalls = (message: unknown): ToolCallRecord[] => {
   if (!message || typeof message !== "object") return [];
   const content = (message as Record<string, unknown>).content;
   if (!Array.isArray(content)) return [];
@@ -391,7 +391,7 @@ export const extractToolCalls = (message: unknown): ToolCallRecord[] => {
   return calls;
 };
 
-export const extractToolResult = (message: unknown): ToolResultRecord | null => {
+const extractToolResult = (message: unknown): ToolResultRecord | null => {
   if (!message || typeof message !== "object") return null;
   const record = message as Record<string, unknown>;
   const role = typeof record.role === "string" ? record.role : "";

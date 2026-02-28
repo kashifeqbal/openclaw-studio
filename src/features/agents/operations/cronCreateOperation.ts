@@ -12,7 +12,7 @@ import {
 } from "@/lib/cron/types";
 import type { GatewayClient } from "@/lib/gateway/GatewayClient";
 
-export const CRON_ACTION_BUSY_MESSAGE = "Please wait for the current cron action to finish.";
+const CRON_ACTION_BUSY_MESSAGE = "Please wait for the current cron action to finish.";
 
 const resolveCreateAgentId = (agentId: string) => {
   const trimmed = agentId.trim();

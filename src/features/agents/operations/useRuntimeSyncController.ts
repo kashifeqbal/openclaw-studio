@@ -27,6 +27,8 @@ import {
 import type { AgentState } from "@/features/agents/state/store";
 import { TRANSCRIPT_V2_ENABLED, logTranscriptDebugMetric } from "@/features/agents/state/transcript";
 import { randomUUID } from "@/lib/uuid";
+import { fetchJson } from "@/lib/http";
+import { isStudioDomainIntentModeEnabled } from "@/lib/controlplane/domain-mode";
 
 type RuntimeSyncDispatchAction = {
   type: "updateAgent";
@@ -36,7 +38,7 @@ type RuntimeSyncDispatchAction = {
 
 type GatewayClientLike = {
   call: <T = unknown>(method: string, params: unknown) => Promise<T>;
-  onGap: (handler: (info: { expected: number; received: number }) => void) => () => void;
+  onGap?: (handler: (info: { expected: number; received: number }) => void) => () => void;
 };
 
 export type UseRuntimeSyncControllerParams = {
@@ -63,6 +65,7 @@ export type RuntimeSyncController = {
 export function useRuntimeSyncController(
   params: UseRuntimeSyncControllerParams
 ): RuntimeSyncController {
+  const useDomainApiReads = isStudioDomainIntentModeEnabled();
   const agentsRef = useRef(params.agents);
   const historyInFlightRef = useRef<Set<string>>(new Set());
   const reconcileRunInFlightRef = useRef<Set<string>>(new Set());
@@ -81,6 +84,18 @@ export function useRuntimeSyncController(
   }, []);
 
   const loadSummarySnapshot = useCallback(async () => {
+    if (useDomainApiReads) {
+      try {
+        await fetchJson<{ summary?: unknown; freshness?: unknown }>("/api/runtime/summary", {
+          cache: "no-store",
+        });
+      } catch (error) {
+        if (!params.isDisconnectLikeError(error)) {
+          console.error("Failed to load domain runtime summary.", error);
+        }
+      }
+      return;
+    }
     const snapshotAgents = agentsRef.current;
     const summaryIntent = resolveSummarySnapshotIntent({
       agents: snapshotAgents,
@@ -113,10 +128,48 @@ export function useRuntimeSyncController(
         console.error("Failed to load summary snapshot.", error);
       }
     }
-  }, [params.client, params.dispatch, params.isDisconnectLikeError]);
+  }, [params.client, params.dispatch, params.isDisconnectLikeError, useDomainApiReads]);
+
+  const loadAgentHistoryViaDomainApi = useCallback(
+    async (agentId: string, limit: number) => {
+      const encodedAgentId = encodeURIComponent(agentId.trim());
+      if (!encodedAgentId) return;
+      const result = await fetchJson<{ entries?: unknown[] }>(
+        `/api/runtime/agents/${encodedAgentId}/history?limit=${limit}`,
+        { cache: "no-store" }
+      );
+      const entries = Array.isArray(result.entries) ? result.entries : [];
+      params.dispatch({
+        type: "updateAgent",
+        agentId,
+        patch: {
+          historyLoadedAt: Date.now(),
+          historyFetchLimit: limit,
+          historyFetchedCount: entries.length,
+          historyMaybeTruncated: false,
+        },
+      });
+    },
+    [params.dispatch]
+  );
 
   const loadAgentHistory = useCallback(
     async (agentId: string, options?: { limit?: number }) => {
+      if (useDomainApiReads) {
+        const agent = agentsRef.current.find((entry) => entry.agentId === agentId) ?? null;
+        const limit =
+          typeof options?.limit === "number" && Number.isFinite(options.limit)
+            ? Math.max(1, Math.floor(options.limit))
+            : agent?.historyFetchLimit ?? defaultHistoryLimit;
+        try {
+          await loadAgentHistoryViaDomainApi(agentId, limit);
+        } catch (error) {
+          if (!params.isDisconnectLikeError(error)) {
+            console.error("Failed to load domain runtime history.", error);
+          }
+        }
+        return;
+      }
       const commands = await runHistorySyncOperation({
         client: params.client,
         agentId,
@@ -140,10 +193,12 @@ export function useRuntimeSyncController(
     },
     [
       defaultHistoryLimit,
+      loadAgentHistoryViaDomainApi,
       maxHistoryLimit,
       params.client,
       params.dispatch,
       params.isDisconnectLikeError,
+      useDomainApiReads,
     ]
   );
 
@@ -162,6 +217,7 @@ export function useRuntimeSyncController(
 
   const reconcileRunningAgents = useCallback(async () => {
     if (params.status !== "connected") return;
+    if (useDomainApiReads) return;
     const commands = await runAgentReconcileOperation({
       client: params.client,
       agents: agentsRef.current,
@@ -198,6 +254,7 @@ export function useRuntimeSyncController(
     params.dispatch,
     params.isDisconnectLikeError,
     params.status,
+    useDomainApiReads,
   ]);
 
   useEffect(() => {
@@ -251,6 +308,8 @@ export function useRuntimeSyncController(
   }, [loadAgentHistory, params.focusedAgentId, params.focusedAgentRunning, params.status]);
 
   useEffect(() => {
+    if (useDomainApiReads) return;
+    if (!params.client.onGap) return;
     return params.client.onGap((info) => {
       const recoveryIntent = resolveRuntimeSyncGapRecoveryIntent();
       console.warn(`Gateway event gap expected ${info.expected}, received ${info.received}.`);
@@ -261,7 +320,7 @@ export function useRuntimeSyncController(
         void reconcileRunningAgents();
       }
     });
-  }, [loadSummarySnapshot, params.client, reconcileRunningAgents]);
+  }, [loadSummarySnapshot, params.client, reconcileRunningAgents, useDomainApiReads]);
 
   return {
     loadSummarySnapshot,

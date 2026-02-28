@@ -234,6 +234,7 @@ describe("useAgentSettingsMutationController", () => {
   const mockedUpdateSkill = vi.mocked(updateSkill);
 
   beforeEach(() => {
+    process.env.NEXT_PUBLIC_STUDIO_DOMAIN_API_MODE = "false";
     restartBlockHookParams = null;
     mockedDeleteAgentViaStudio.mockReset();
     mockedPerformCronCreateFlow.mockReset();
@@ -277,6 +278,7 @@ describe("useAgentSettingsMutationController", () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
+    delete process.env.NEXT_PUBLIC_STUDIO_DOMAIN_API_MODE;
   });
 
   it("delete_denied_by_guard_does_not_run_delete_side_effect", async () => {
@@ -288,6 +290,33 @@ describe("useAgentSettingsMutationController", () => {
 
     expect(ctx.enqueueConfigMutation).not.toHaveBeenCalled();
     expect(mockedDeleteAgentViaStudio).not.toHaveBeenCalled();
+  });
+
+  it("domain_mode_allows_delete_when_browser_gateway_is_disconnected", async () => {
+    process.env.NEXT_PUBLIC_STUDIO_DOMAIN_API_MODE = "true";
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    mockedRunLifecycle.mockImplementation(async ({ deps }) => {
+      deps.setQueuedBlock();
+      deps.setMutatingBlock();
+      await deps.executeMutation();
+      deps.clearBlock();
+      return true;
+    });
+    mockedDeleteAgentViaStudio.mockResolvedValue({ trashed: { trashDir: "", moved: [] }, restored: null });
+
+    const ctx = renderController({ status: "disconnected" });
+
+    await act(async () => {
+      await ctx.getValue().handleDeleteAgent("agent-1");
+    });
+
+    expect(mockedRunLifecycle).toHaveBeenCalled();
+    expect(mockedDeleteAgentViaStudio).toHaveBeenCalledWith(
+      expect.objectContaining({
+        agentId: "agent-1",
+        useDomainIntents: true,
+      })
+    );
   });
 
   it("delete_cancelled_by_confirmation_does_not_run_delete_side_effect", async () => {

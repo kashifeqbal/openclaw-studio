@@ -14,7 +14,7 @@ const SETTINGS_DIRNAME = "openclaw-studio";
 const SETTINGS_FILENAME = "settings.json";
 const OPENCLAW_CONFIG_FILENAME = "openclaw.json";
 
-export const resolveStudioSettingsPath = () =>
+const resolveStudioSettingsPath = () =>
   path.join(resolveStateDir(), SETTINGS_DIRNAME, SETTINGS_FILENAME);
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -45,6 +45,27 @@ export const loadLocalGatewayDefaults = () => {
   return readOpenclawGatewayDefaults();
 };
 
+export const redactStudioSettingsSecrets = (settings: StudioSettings): StudioSettings => {
+  if (!settings.gateway) return settings;
+  return {
+    ...settings,
+    gateway: {
+      ...settings.gateway,
+      token: "",
+    },
+  };
+};
+
+export const redactLocalGatewayDefaultsSecrets = (
+  defaults: { url: string; token: string } | null
+): { url: string; token: string } | null => {
+  if (!defaults) return null;
+  return {
+    ...defaults,
+    token: "",
+  };
+};
+
 export const loadStudioSettings = (): StudioSettings => {
   const settingsPath = resolveStudioSettingsPath();
   if (!fs.existsSync(settingsPath)) {
@@ -69,7 +90,7 @@ export const loadStudioSettings = (): StudioSettings => {
   return settings;
 };
 
-export const saveStudioSettings = (next: StudioSettings) => {
+const saveStudioSettings = (next: StudioSettings) => {
   const settingsPath = resolveStudioSettingsPath();
   const dir = path.dirname(settingsPath);
   if (!fs.existsSync(dir)) {

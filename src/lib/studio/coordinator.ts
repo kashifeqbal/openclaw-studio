@@ -9,6 +9,7 @@ import type {
 export type StudioSettingsResponse = {
   settings: StudioSettings;
   localGatewayDefaults?: StudioGatewaySettings | null;
+  domainApiModeEnabled?: boolean;
 };
 
 type FocusedPatch = Record<string, Partial<StudioFocusedPreference> | null>;
@@ -124,12 +125,19 @@ export class StudioSettingsCoordinator {
       this.timer = null;
     }
     const patch = this.pendingPatch;
-    this.pendingPatch = null;
     if (!patch) {
       return this.queue;
     }
     const write = this.queue.then(async () => {
-      await this.transport.updateSettings(patch);
+      if (this.pendingPatch === patch) {
+        this.pendingPatch = null;
+      }
+      try {
+        await this.transport.updateSettings(patch);
+      } catch (err) {
+        this.pendingPatch = mergeStudioPatch(this.pendingPatch, patch);
+        throw err;
+      }
     });
     this.queue = write.catch((err) => {
       console.error("Failed to persist studio settings patch.", err);
@@ -147,11 +155,11 @@ export class StudioSettingsCoordinator {
   }
 }
 
-export const fetchStudioSettings = async (): Promise<StudioSettingsResponse> => {
+const fetchStudioSettings = async (): Promise<StudioSettingsResponse> => {
   return fetchJson<StudioSettingsResponse>("/api/studio", { cache: "no-store" });
 };
 
-export const updateStudioSettings = async (
+const updateStudioSettings = async (
   patch: StudioSettingsPatch
 ): Promise<StudioSettingsResponse> => {
   return fetchJson<StudioSettingsResponse>("/api/studio", {

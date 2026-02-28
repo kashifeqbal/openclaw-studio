@@ -103,6 +103,21 @@ describe("studio settings normalization", () => {
     });
   });
 
+  it("preserves gateway token when patching only url", () => {
+    const current = normalizeStudioSettings({
+      gateway: { url: "ws://gateway.old:18789", token: "secret-token" },
+    });
+
+    const merged = mergeStudioSettings(current, {
+      gateway: { url: "ws://gateway.new:18789" },
+    });
+
+    expect(merged.gateway).toEqual({
+      url: "ws://gateway.new:18789",
+      token: "secret-token",
+    });
+  });
+
   it("normalizes avatar seeds per gateway", () => {
     const normalized = normalizeStudioSettings({
       avatars: {

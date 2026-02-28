@@ -24,7 +24,7 @@ const resolveReloadModeFromConfig = (config: unknown): string | null => {
   return mode.length > 0 ? mode : "hybrid";
 };
 
-export const shouldAwaitDisconnectRestartForReloadMode = (mode: string | null): boolean =>
+const shouldAwaitDisconnectRestartForReloadMode = (mode: string | null): boolean =>
   mode !== "hot" && mode !== "off" && mode !== "hybrid";
 
 export async function shouldAwaitDisconnectRestartForRemoteMutation(params: {

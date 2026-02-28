@@ -6,6 +6,7 @@ import {
   type CronJobRestoreInput,
 } from "@/lib/cron/types";
 import { deleteGatewayAgent } from "@/lib/gateway/agentConfig";
+import { postStudioIntent } from "@/lib/controlplane/intents-client";
 
 type FetchJson = typeof defaultFetchJson;
 
@@ -74,6 +75,7 @@ export const deleteAgentViaStudio = async (params: {
   agentId: string;
   fetchJson?: FetchJson;
   logError?: (message: string, error: unknown) => void;
+  useDomainIntents?: boolean;
 }): Promise<DeleteAgentTransactionResult> => {
   const fetchJson = params.fetchJson ?? defaultFetchJson;
   const logError = params.logError ?? ((message, error) => console.error(message, error));
@@ -109,6 +111,10 @@ export const deleteAgentViaStudio = async (params: {
         await restoreCronJobs(params.client, jobs);
       },
       deleteGatewayAgent: async (agentId) => {
+        if (params.useDomainIntents) {
+          await postStudioIntent("/api/intents/agent-delete", { agentId });
+          return;
+        }
         await deleteGatewayAgent({ client: params.client, agentId });
       },
       logError,

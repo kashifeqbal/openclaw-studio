@@ -98,8 +98,6 @@ type AgentSettingsPanelProps = {
   onUpdateAgentPermissions?: (draft: AgentPermissionsDraft) => Promise<void> | void;
   onDelete: () => void;
   canDelete?: boolean;
-  onToolCallingToggle: (enabled: boolean) => void;
-  onThinkingTracesToggle: (enabled: boolean) => void;
   cronJobs: CronJobSummary[];
   cronLoading: boolean;
   cronError: string | null;
@@ -301,8 +299,6 @@ export const AgentSettingsPanel = ({
   onUpdateAgentPermissions = () => {},
   onDelete,
   canDelete = true,
-  onToolCallingToggle,
-  onThinkingTracesToggle,
   cronJobs,
   cronLoading,
   cronError,

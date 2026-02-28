@@ -212,4 +212,63 @@ describe("execApprovalResolveOperation", () => {
 
     expect(onAllowed).not.toHaveBeenCalled();
   });
+
+  it("uses exec-approval-resolve intent in domain mode", async () => {
+    const call = vi.fn(async (method: string) => {
+      if (method === "exec.approval.resolve") {
+        throw new Error("exec.approval.resolve should not be called in domain mode");
+      }
+      return { ok: true };
+    });
+    const fetchMock = vi.fn(async () =>
+      new Response(JSON.stringify({ ok: true, payload: { ok: true } }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      })
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const approval: PendingExecApproval = {
+      id: "appr-1",
+      agentId: "a1",
+      sessionKey: "sess-1",
+      command: "echo hi",
+      cwd: null,
+      host: null,
+      security: null,
+      ask: null,
+      resolvedPath: null,
+      createdAtMs: Date.now(),
+      expiresAtMs: Date.now() + 60_000,
+      resolving: false,
+      error: null,
+    };
+
+    const approvalsByAgentId = createState<Record<string, PendingExecApproval[]>>({ a1: [approval] });
+    const unscopedApprovals = createState<PendingExecApproval[]>([]);
+
+    await resolveExecApprovalViaStudio({
+      client: { call },
+      approvalId: "appr-1",
+      decision: "deny",
+      getAgents: () => [],
+      getLatestAgent: () => null,
+      getPendingState: () => ({
+        approvalsByAgentId: approvalsByAgentId.get(),
+        unscopedApprovals: unscopedApprovals.get(),
+      }),
+      setPendingExecApprovalsByAgentId: approvalsByAgentId.set,
+      setUnscopedPendingExecApprovals: unscopedApprovals.set,
+      requestHistoryRefresh: vi.fn(),
+      isDisconnectLikeError: () => false,
+      useDomainIntents: true,
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/intents/exec-approval-resolve",
+      expect.objectContaining({ method: "POST" })
+    );
+    expect(call).not.toHaveBeenCalledWith("exec.approval.resolve", expect.anything());
+    vi.unstubAllGlobals();
+  });
 });

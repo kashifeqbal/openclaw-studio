@@ -19,7 +19,7 @@ export type ReconcileEligibility = {
 const SUMMARY_PREVIEW_LIMIT = 8;
 const SUMMARY_PREVIEW_MAX_CHARS = 240;
 
-export const resolveSummarySnapshotKeys = (params: {
+const resolveSummarySnapshotKeys = (params: {
   agents: Array<{ sessionCreated: boolean; sessionKey: string }>;
   maxKeys: number;
 }): string[] => {

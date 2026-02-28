@@ -1,4 +1,3 @@
-import { loadStudioSettings } from "@/lib/studio/settings-store";
 import * as childProcess from "node:child_process";
 
 const SSH_TARGET_ENV = "OPENCLAW_GATEWAY_SSH_TARGET";
@@ -45,15 +44,7 @@ export const resolveGatewaySshTargetFromGatewayUrl = (
   return `${user}@${hostname}`;
 };
 
-export const resolveGatewaySshTarget = (env: NodeJS.ProcessEnv = process.env): string => {
-  const configured = resolveConfiguredSshTarget(env);
-  if (configured) return configured;
-
-  const settings = loadStudioSettings();
-  return resolveGatewaySshTargetFromGatewayUrl(settings.gateway?.url?.trim() ?? "", env);
-};
-
-export const extractJsonErrorMessage = (value: string): string | null => {
+const extractJsonErrorMessage = (value: string): string | null => {
   const trimmed = value.trim();
   if (!trimmed) return null;
   try {
@@ -72,7 +63,7 @@ export const extractJsonErrorMessage = (value: string): string | null => {
   }
 };
 
-export const parseJsonOutput = (raw: string, label: string): unknown => {
+const parseJsonOutput = (raw: string, label: string): unknown => {
   const trimmed = raw.trim();
   if (!trimmed) {
     throw new Error(`Command produced empty JSON output (${label}).`);

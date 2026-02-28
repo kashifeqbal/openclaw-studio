@@ -60,10 +60,6 @@ test-results
 /.agent/*.local.md
 /.agent/future-plans
 /.openclaw
-/.clawdbot
-/.moltbot
-/agent-canvas
-/worktrees
 /.claude
 
 # local issue tracker

@@ -3,6 +3,11 @@ export type StudioGatewaySettings = {
   token: string;
 };
 
+export type StudioGatewaySettingsPatch = {
+  url?: string | null;
+  token?: string | null;
+};
+
 export type FocusFilter = "all" | "running" | "approvals";
 export type StudioViewMode = "focused";
 
@@ -20,7 +25,7 @@ export type StudioSettings = {
 };
 
 export type StudioSettingsPatch = {
-  gateway?: StudioGatewaySettings | null;
+  gateway?: StudioGatewaySettingsPatch | null;
   focused?: Record<string, Partial<StudioFocusedPreference> | null>;
   avatars?: Record<string, Record<string, string | null> | null>;
 };
@@ -124,6 +129,23 @@ const normalizeGatewaySettings = (value: unknown): StudioGatewaySettings | null 
   return { url, token };
 };
 
+const hasOwn = (value: Record<string, unknown>, key: string) =>
+  Object.prototype.hasOwnProperty.call(value, key);
+
+const mergeGatewaySettings = (
+  current: StudioGatewaySettings | null,
+  patch: StudioGatewaySettingsPatch | null | undefined
+): StudioGatewaySettings | null => {
+  if (patch === undefined) return current;
+  if (patch === null) return null;
+  if (!isRecord(patch)) return current;
+
+  const nextUrl = hasOwn(patch, "url") ? normalizeGatewayUrl(patch.url) : current?.url ?? "";
+  const nextToken = hasOwn(patch, "token") ? coerceString(patch.token) : current?.token ?? "";
+  if (!nextUrl) return null;
+  return { url: nextUrl, token: nextToken };
+};
+
 const normalizeFocused = (value: unknown): Record<string, StudioFocusedPreference> => {
   if (!isRecord(value)) return {};
   const focused: Record<string, StudioFocusedPreference> = {};
@@ -179,8 +201,7 @@ export const mergeStudioSettings = (
   current: StudioSettings,
   patch: StudioSettingsPatch
 ): StudioSettings => {
-  const nextGateway =
-    patch.gateway === undefined ? current.gateway : normalizeGatewaySettings(patch.gateway);
+  const nextGateway = mergeGatewaySettings(current.gateway, patch.gateway);
   const nextFocused = { ...current.focused };
   const nextAvatars = { ...current.avatars };
   if (patch.focused) {

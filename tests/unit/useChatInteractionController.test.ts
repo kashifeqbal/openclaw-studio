@@ -5,9 +5,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useChatInteractionController } from "@/features/agents/operations/useChatInteractionController";
 import type { AgentState } from "@/features/agents/state/store";
 import { sendChatMessageViaStudio } from "@/features/agents/operations/chatSendOperation";
+import { postStudioIntent } from "@/lib/controlplane/intents-client";
 
 vi.mock("@/features/agents/operations/chatSendOperation", () => ({
   sendChatMessageViaStudio: vi.fn(async () => undefined),
+}));
+vi.mock("@/lib/controlplane/intents-client", () => ({
+  postStudioIntent: vi.fn(async () => ({ ok: true })),
 }));
 
 const createAgent = (overrides?: Partial<AgentState>): AgentState => {
@@ -191,6 +195,7 @@ const renderController = (
 
 describe("useChatInteractionController", () => {
   const mockedSendChatMessageViaStudio = vi.mocked(sendChatMessageViaStudio);
+  const mockedPostStudioIntent = vi.mocked(postStudioIntent);
   const originalRaf = globalThis.requestAnimationFrame;
   const originalCaf = globalThis.cancelAnimationFrame;
 
@@ -198,6 +203,9 @@ describe("useChatInteractionController", () => {
     vi.useFakeTimers();
     mockedSendChatMessageViaStudio.mockReset();
     mockedSendChatMessageViaStudio.mockResolvedValue(undefined);
+    mockedPostStudioIntent.mockReset();
+    mockedPostStudioIntent.mockResolvedValue({ ok: true });
+    process.env.NEXT_PUBLIC_STUDIO_DOMAIN_API_MODE = "false";
   });
 
   afterEach(() => {
@@ -205,6 +213,7 @@ describe("useChatInteractionController", () => {
     globalThis.requestAnimationFrame = originalRaf;
     globalThis.cancelAnimationFrame = originalCaf;
     vi.restoreAllMocks();
+    delete process.env.NEXT_PUBLIC_STUDIO_DOMAIN_API_MODE;
   });
 
   it("flushes pending draft and cancels debounce timer", async () => {
@@ -498,6 +507,28 @@ describe("useChatInteractionController", () => {
       "setInspectSidebarNull",
       "setMobilePaneChat",
     ]);
+  });
+
+  it("uses sessions-reset intent for new-session in domain mode", async () => {
+    process.env.NEXT_PUBLIC_STUDIO_DOMAIN_API_MODE = "true";
+    const ctx = renderController({
+      agents: [
+        createAgent({
+          agentId: "agent-1",
+          runId: "run-42",
+          sessionKey: "  session-42  ",
+        }),
+      ],
+    });
+
+    await act(async () => {
+      await ctx.getValue().handleNewSession("agent-1");
+    });
+
+    expect(mockedPostStudioIntent).toHaveBeenCalledWith("/api/intents/sessions-reset", {
+      key: "session-42",
+    });
+    expect(ctx.call).not.toHaveBeenCalledWith("sessions.reset", expect.anything());
   });
 
   it("appends output when new-session fails", async () => {

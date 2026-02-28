@@ -7,7 +7,7 @@ Thanks for helping improve OpenClaw Studio.
 
 ## Before you start
 - Install OpenClaw and confirm the gateway runs locally.
-- This repo is UI-only and reads config from `~/.openclaw` with legacy fallback to `~/.moltbot` or `~/.clawdbot`.
+- This repo is UI-only and reads config from `~/.openclaw`.
 - It does not run or build the gateway from source.
 
 ## Local setup
