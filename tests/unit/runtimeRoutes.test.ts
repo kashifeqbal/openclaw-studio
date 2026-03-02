@@ -287,7 +287,7 @@ describe("runtime routes", () => {
     expect(secondBody.nextBeforeOutboxId).toBeNull();
   });
 
-  it("agent history route backfills legacy rows in bounded batches", async () => {
+  it("agent history route keeps cursor stable while backfill remains incomplete", async () => {
     const eventsBeforeForAgent = vi
       .fn()
       .mockReturnValueOnce([
@@ -380,7 +380,56 @@ describe("runtime routes", () => {
     expect(eventsBeforeForAgent).toHaveBeenNthCalledWith(2, "alpha", 11, 3);
     expect(body.entries.map((entry) => entry.id)).toEqual([5, 7]);
     expect(body.hasMore).toBe(true);
-    expect(body.nextBeforeOutboxId).toBe(5);
+    expect(body.nextBeforeOutboxId).toBe(11);
+  });
+
+  it("agent history route reports continuation when backfill cap is reached before exhaustion", async () => {
+    const eventsBeforeForAgent = vi.fn().mockReturnValue([]);
+    const backfillAgentHistoryIndex = vi
+      .fn()
+      .mockReturnValue({ scannedRows: 500, updatedRows: 0, exhausted: false });
+    const runtimeMock: RuntimeMock = {
+      ensureStarted: async () => {},
+      snapshot: () => ({
+        status: "connected",
+        reason: null,
+        asOf: "2026-02-28T02:40:00.000Z",
+        outboxHead: 10,
+      }),
+      eventsAfter: () => [],
+      eventsBefore: () => {
+        throw new Error("legacy scan path used");
+      },
+      eventsBeforeForAgent,
+      backfillAgentHistoryIndex,
+      subscribe: () => () => {},
+    };
+
+    const mod = await loadRouteModule<{
+      GET: (
+        request: Request,
+        context: { params: Promise<{ agentId: string }> }
+      ) => Promise<Response>;
+    }>("@/app/api/runtime/agents/[agentId]/history/route", runtimeMock);
+
+    const response = await mod.GET(
+      new Request("http://localhost/api/runtime/agents/alpha/history?limit=2"),
+      { params: Promise.resolve({ agentId: "alpha" }) }
+    );
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as {
+      entries: Array<{ id: number }>;
+      hasMore: boolean;
+      nextBeforeOutboxId: number | null;
+    };
+    expect(eventsBeforeForAgent).toHaveBeenNthCalledWith(1, "alpha", 11, 3);
+    expect(eventsBeforeForAgent).toHaveBeenNthCalledWith(2, "alpha", 11, 3);
+    expect(eventsBeforeForAgent).toHaveBeenNthCalledWith(3, "alpha", 11, 3);
+    expect(backfillAgentHistoryIndex).toHaveBeenNthCalledWith(1, 11, 500);
+    expect(backfillAgentHistoryIndex).toHaveBeenNthCalledWith(2, 11, 500);
+    expect(body.entries).toEqual([]);
+    expect(body.hasMore).toBe(true);
+    expect(body.nextBeforeOutboxId).toBe(11);
   });
 
   it("stream route replays from Last-Event-ID and emits live updates", async () => {
