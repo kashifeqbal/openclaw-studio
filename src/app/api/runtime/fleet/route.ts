@@ -2,13 +2,104 @@ import { NextResponse } from "next/server";
 
 import { hydrateAgentFleetFromGateway } from "@/features/agents/operations/agentFleetHydration";
 import type { GatewayModelPolicySnapshot } from "@/lib/gateway/models";
-import { getControlPlaneRuntime, isStudioDomainApiModeEnabled } from "@/lib/controlplane/runtime";
+import { deriveRuntimeFreshness, probeOpenClawLocalState } from "@/lib/controlplane/degraded-read";
+import type { ControlPlaneOutboxEntry } from "@/lib/controlplane/contracts";
+import { bootstrapDomainRuntime } from "@/lib/controlplane/runtime-route-bootstrap";
 import { loadStudioSettings } from "@/lib/studio/settings-store";
 
 export const runtime = "nodejs";
 
+const DEGRADED_FLEET_OUTBOX_SCAN_LIMIT = 5000;
+const AGENT_SESSION_KEY_RE = /^agent:([^:]+):/i;
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  Boolean(value && typeof value === "object" && !Array.isArray(value));
+
+const normalizeAgentId = (value: unknown): string => {
+  if (typeof value !== "string") return "";
+  return value.trim().toLowerCase();
+};
+
+const normalizeAgentName = (value: unknown): string => {
+  if (typeof value !== "string") return "";
+  return value.trim();
+};
+
+const parseAgentIdFromSessionKey = (value: unknown): string => {
+  if (typeof value !== "string") return "";
+  const match = value.trim().match(AGENT_SESSION_KEY_RE);
+  return match?.[1]?.trim().toLowerCase() ?? "";
+};
+
+const resolveAgentIdentityFromOutboxEntry = (
+  entry: ControlPlaneOutboxEntry
+): { agentId: string; name: string } | null => {
+  if (entry.event.type !== "gateway.event") return null;
+  if (!isRecord(entry.event.payload)) return null;
+  const payload = entry.event.payload;
+
+  const directAgentId = normalizeAgentId(payload.agentId);
+  const sessionAgentId =
+    parseAgentIdFromSessionKey(payload.sessionKey) ||
+    parseAgentIdFromSessionKey(payload.key) ||
+    parseAgentIdFromSessionKey(payload.runSessionKey);
+  const agentId = directAgentId || sessionAgentId;
+  if (!agentId) return null;
+
+  const name =
+    normalizeAgentName(payload.agentName) || normalizeAgentName(payload.name) || agentId;
+  return { agentId, name };
+};
+
+const buildAgentMainSessionKey = (agentId: string): string => `agent:${agentId}:main`;
+
+const deriveDegradedFleetResult = (
+  entries: ControlPlaneOutboxEntry[],
+  cachedConfigSnapshot: GatewayModelPolicySnapshot | null
+) => {
+  const recoveredNewest: Array<{ agentId: string; name: string; sessionKey: string }> = [];
+  const recoveredByAgentId = new Map<
+    string,
+    { agentId: string; name: string; sessionKey: string }
+  >();
+
+  for (let index = entries.length - 1; index >= 0; index -= 1) {
+    const identity = resolveAgentIdentityFromOutboxEntry(entries[index]);
+    if (!identity) continue;
+
+    const existing = recoveredByAgentId.get(identity.agentId);
+    if (existing) {
+      if (existing.name === existing.agentId && identity.name !== identity.agentId) {
+        existing.name = identity.name;
+      }
+      continue;
+    }
+
+    const seed = {
+      agentId: identity.agentId,
+      name: identity.name,
+      sessionKey: buildAgentMainSessionKey(identity.agentId),
+    };
+    recoveredByAgentId.set(identity.agentId, seed);
+    recoveredNewest.push(seed);
+  }
+
+  const seeds = [...recoveredNewest].reverse();
+  const sessionCreatedAgentIds = seeds.map((seed) => seed.agentId);
+
+  return {
+    seeds,
+    sessionCreatedAgentIds,
+    sessionSettingsSyncedAgentIds: [] as string[],
+    summaryPatches: [] as Array<{ agentId: string; patch: Record<string, unknown> }>,
+    suggestedSelectedAgentId: sessionCreatedAgentIds[0] ?? null,
+    configSnapshot: cachedConfigSnapshot,
+  };
+};
+
 export async function POST(request: Request) {
-  if (!isStudioDomainApiModeEnabled()) {
+  const bootstrap = await bootstrapDomainRuntime();
+  if (bootstrap.kind === "mode-disabled") {
     return NextResponse.json({ enabled: false, error: "domain_api_mode_disabled" }, { status: 404 });
   }
 
@@ -23,15 +114,35 @@ export async function POST(request: Request) {
     }
   } catch {}
 
-  const controlPlane = getControlPlaneRuntime();
-  try {
-    await controlPlane.ensureStarted();
-  } catch (err) {
-    const message = err instanceof Error ? err.message : "controlplane_start_failed";
+  if (bootstrap.kind === "runtime-init-failed") {
     return NextResponse.json(
-      { enabled: true, error: message, code: "GATEWAY_UNAVAILABLE", reason: "gateway_unavailable" },
+      {
+        enabled: true,
+        error: bootstrap.message,
+        code: "CONTROLPLANE_RUNTIME_INIT_FAILED",
+        reason: "runtime_init_failed",
+      },
       { status: 503 }
     );
+  }
+  const controlPlane = bootstrap.runtime;
+
+  if (bootstrap.kind === "start-failed") {
+    const snapshot = controlPlane.snapshot();
+    const floorOutboxId = Math.max(0, snapshot.outboxHead - DEGRADED_FLEET_OUTBOX_SCAN_LIMIT);
+    const entries = controlPlane.eventsAfter(floorOutboxId, DEGRADED_FLEET_OUTBOX_SCAN_LIMIT);
+    const probe = await probeOpenClawLocalState();
+
+    return NextResponse.json({
+      enabled: true,
+      degraded: true,
+      error: bootstrap.message,
+      code: "GATEWAY_UNAVAILABLE",
+      reason: "gateway_unavailable",
+      freshness: deriveRuntimeFreshness(snapshot, probe),
+      probe,
+      result: deriveDegradedFleetResult(entries, cachedConfigSnapshot),
+    });
   }
 
   try {

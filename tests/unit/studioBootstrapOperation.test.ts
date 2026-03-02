@@ -31,7 +31,6 @@ describe("studioBootstrapOperation", () => {
   beforeEach(() => {
     hydrateAgentFleetFromGatewayMock.mockReset();
     fetchJsonMock.mockReset();
-    process.env.NEXT_PUBLIC_STUDIO_DOMAIN_API_MODE = "false";
   });
 
   it("builds bootstrap commands from hydrated fleet result", async () => {
@@ -65,6 +64,7 @@ describe("studioBootstrapOperation", () => {
       isDisconnectLikeError: () => false,
       preferredSelectedAgentId: "agent-1",
       hasCurrentSelection: false,
+      useDomainApiMode: false,
     });
 
     expect(commands).toEqual([
@@ -98,13 +98,13 @@ describe("studioBootstrapOperation", () => {
       isDisconnectLikeError: () => false,
       preferredSelectedAgentId: null,
       hasCurrentSelection: false,
+      useDomainApiMode: false,
     });
 
     expect(commands).toEqual([{ kind: "set-error", message: "load failed" }]);
   });
 
   it("uses runtime fleet API in domain mode", async () => {
-    process.env.NEXT_PUBLIC_STUDIO_DOMAIN_API_MODE = "true";
     const seeds: AgentStoreSeed[] = [{ agentId: "agent-1", name: "Agent One", sessionKey: "s1" }];
     fetchJsonMock.mockResolvedValue({
       result: {
@@ -125,6 +125,7 @@ describe("studioBootstrapOperation", () => {
       isDisconnectLikeError: () => false,
       preferredSelectedAgentId: null,
       hasCurrentSelection: false,
+      useDomainApiMode: true,
     });
 
     expect(fetchJsonMock).toHaveBeenCalledWith(
@@ -139,6 +140,79 @@ describe("studioBootstrapOperation", () => {
         initialSelectedAgentId: "agent-1",
       },
     ]);
+  });
+
+  it("hydrates agents from degraded runtime fleet payload in domain mode", async () => {
+    const seeds: AgentStoreSeed[] = [{ agentId: "agent-1", name: "Recovered", sessionKey: "s1" }];
+    fetchJsonMock.mockResolvedValue({
+      enabled: true,
+      degraded: true,
+      error: "gateway unavailable",
+      freshness: {
+        source: "projection",
+        stale: true,
+        asOf: "2026-02-28T02:40:00.000Z",
+        reason: "gateway_unavailable",
+      },
+      result: {
+        seeds,
+        sessionCreatedAgentIds: ["agent-1"],
+        sessionSettingsSyncedAgentIds: [],
+        summaryPatches: [],
+        suggestedSelectedAgentId: "agent-1",
+        configSnapshot: null,
+      },
+    });
+
+    const commands = await runStudioBootstrapLoadOperation({
+      client: { call: async () => null },
+      gatewayUrl: "https://gateway.test",
+      cachedConfigSnapshot: null,
+      loadStudioSettings: async () => null,
+      isDisconnectLikeError: () => false,
+      preferredSelectedAgentId: null,
+      hasCurrentSelection: false,
+      useDomainApiMode: true,
+    });
+
+    expect(commands).toEqual([
+      {
+        kind: "hydrate-agents",
+        seeds,
+        initialSelectedAgentId: "agent-1",
+      },
+      {
+        kind: "mark-session-created",
+        agentId: "agent-1",
+        sessionSettingsSynced: false,
+      },
+    ]);
+  });
+
+  it("uses explicit mode flag over env fallbacks when selecting fleet load path", async () => {
+    process.env.NEXT_PUBLIC_STUDIO_DOMAIN_API_MODE = "true";
+    hydrateAgentFleetFromGatewayMock.mockResolvedValue({
+      seeds: [{ agentId: "agent-1", name: "Agent One", sessionKey: "s1" }],
+      sessionCreatedAgentIds: [],
+      sessionSettingsSyncedAgentIds: [],
+      summaryPatches: [],
+      suggestedSelectedAgentId: "agent-1",
+      configSnapshot: null,
+    });
+
+    await runStudioBootstrapLoadOperation({
+      client: { call: async () => null },
+      gatewayUrl: "https://gateway.test",
+      cachedConfigSnapshot: null,
+      loadStudioSettings: async () => null,
+      isDisconnectLikeError: () => false,
+      preferredSelectedAgentId: null,
+      hasCurrentSelection: false,
+      useDomainApiMode: false,
+    });
+
+    expect(hydrateAgentFleetFromGatewayMock).toHaveBeenCalledTimes(1);
+    expect(fetchJsonMock).not.toHaveBeenCalled();
   });
 
   it("executes bootstrap commands with injected callbacks", () => {

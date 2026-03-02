@@ -1050,6 +1050,13 @@ describe("runtime routes", () => {
       isStudioDomainApiModeEnabled: () => true,
       getControlPlaneRuntime: () => ({
         ensureStarted: async () => {},
+        snapshot: () => ({
+          status: "connected",
+          reason: null,
+          asOf: "2026-02-28T02:40:00.000Z",
+          outboxHead: 0,
+        }),
+        eventsAfter: () => [],
         callGateway,
       }),
     }));
@@ -1085,7 +1092,7 @@ describe("runtime routes", () => {
     expect(body.result.seeds[0]?.agentId).toBe("agent-1");
   });
 
-  it("runtime fleet route returns 503 gateway_unavailable when runtime cannot start", async () => {
+  it("runtime fleet route returns degraded projection payload when runtime cannot start", async () => {
     vi.resetModules();
     vi.doMock("@/lib/controlplane/runtime", () => ({
       isStudioDomainApiModeEnabled: () => true,
@@ -1093,7 +1100,95 @@ describe("runtime routes", () => {
         ensureStarted: async () => {
           throw new Error("gateway unavailable");
         },
+        snapshot: () => ({
+          status: "error",
+          reason: "gateway_closed",
+          asOf: "2026-02-28T02:40:00.000Z",
+          outboxHead: 5,
+        }),
+        eventsAfter: () => [
+          {
+            id: 3,
+            event: {
+              type: "gateway.event",
+              event: "runtime.delta",
+              seq: 12,
+              payload: {
+                sessionKey: "agent:alpha:main",
+              },
+              asOf: "2026-02-28T02:40:03.000Z",
+            },
+            createdAt: "2026-02-28T02:40:03.000Z",
+          },
+          {
+            id: 4,
+            event: {
+              type: "gateway.event",
+              event: "runtime.delta",
+              seq: 13,
+              payload: {
+                agentId: "beta",
+                agentName: "Beta Agent",
+              },
+              asOf: "2026-02-28T02:40:04.000Z",
+            },
+            createdAt: "2026-02-28T02:40:04.000Z",
+          },
+        ],
       }),
+    }));
+    vi.doMock("@/lib/controlplane/degraded-read", async () => {
+      const actual = await vi.importActual<typeof import("@/lib/controlplane/degraded-read")>(
+        "@/lib/controlplane/degraded-read"
+      );
+      return {
+        ...actual,
+        probeOpenClawLocalState: vi.fn(async () => ({
+          at: "2026-02-28T02:41:00.000Z",
+          status: { ok: false, error: "openclaw_cli_not_found" },
+          sessions: { ok: false, error: "openclaw_cli_not_found" },
+        })),
+      };
+    });
+    const route = await import("@/app/api/runtime/fleet/route");
+    const response = await route.POST(
+      new Request("http://localhost/api/runtime/fleet", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ cachedConfigSnapshot: null }),
+      })
+    );
+    expect(response.status).toBe(200);
+    const body = await response.json() as {
+      enabled: boolean;
+      degraded: boolean;
+      error: string;
+      code: string;
+      reason: string;
+      result: {
+        seeds: Array<{ agentId: string; name: string; sessionKey: string }>;
+        sessionCreatedAgentIds: string[];
+      };
+    };
+    expect(body.enabled).toBe(true);
+    expect(body.degraded).toBe(true);
+    expect(body.error).toBe("gateway unavailable");
+    expect(body.code).toBe("GATEWAY_UNAVAILABLE");
+    expect(body.reason).toBe("gateway_unavailable");
+    expect(body.result.seeds).toEqual([
+      { agentId: "alpha", name: "alpha", sessionKey: "agent:alpha:main" },
+      { agentId: "beta", name: "Beta Agent", sessionKey: "agent:beta:main" },
+    ]);
+    expect(body.result.sessionCreatedAgentIds).toEqual(["alpha", "beta"]);
+  });
+
+  it("runtime fleet route returns 503 when runtime initialization fails", async () => {
+    vi.resetModules();
+    vi.doMock("@/lib/controlplane/runtime", () => ({
+      isStudioDomainApiModeEnabled: () => true,
+      getControlPlaneRuntime: () => {
+        throw new Error("runtime init failed");
+      },
     }));
     const route = await import("@/app/api/runtime/fleet/route");
     const response = await route.POST(
@@ -1111,8 +1206,8 @@ describe("runtime routes", () => {
       reason: string;
     };
     expect(body.enabled).toBe(true);
-    expect(body.error).toBe("gateway unavailable");
-    expect(body.code).toBe("GATEWAY_UNAVAILABLE");
-    expect(body.reason).toBe("gateway_unavailable");
+    expect(body.error).toBe("runtime init failed");
+    expect(body.code).toBe("CONTROLPLANE_RUNTIME_INIT_FAILED");
+    expect(body.reason).toBe("runtime_init_failed");
   });
 });
