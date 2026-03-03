@@ -1,68 +1,9 @@
 import type { Page } from "@playwright/test";
+import type { AgentStoreSeed } from "@/features/agents/state/store";
 
 type RuntimeRouteFixture = {
   fleetResult?: {
-    seeds: Array<{
-      agentId: string;
-      name: string;
-      model: string;
-      modelProvider: string;
-      mode: "focused";
-      status: "idle" | "running";
-      sessionKey: string | null;
-      sessionCreated: boolean;
-      sessionSettingsSynced: boolean;
-      busy: boolean;
-      latestUpdateAt: string | null;
-      latestUpdate: string;
-      latestTranscriptLine: string;
-      queuedMessageCount: number;
-      latestDoneReason: string | null;
-      avatarSeed: string;
-      customInstructions: string;
-      supportsImageInput: boolean;
-      supportsStreaming: boolean;
-      supportsSkillSetup: boolean;
-      toolCallingEnabled: boolean;
-      showThinkingTraces: boolean;
-      thinkingLevel: string | null;
-      runStartedAt: string | null;
-      runningSince: string | null;
-      updatedAt: string | null;
-      awaitingUserInput: boolean;
-      cronScheduleText: string | null;
-      cronNextRunAt: string | null;
-      cronEnabled: boolean;
-      cronJobId: string | null;
-      modelMenuAvailable: boolean;
-      supportsModelPicker: boolean;
-      supportsSessionSettings: boolean;
-      permissions: {
-        securityLevel: "deny" | "allowlist" | "full";
-        askForApprovals: "off" | "on-miss" | "always";
-        defaultMode: "deny" | "allowlist" | "full";
-        defaultAskForApprovals: "off" | "on-miss" | "always";
-      };
-      historyLoadedAt: number | null;
-      historyFetchLimit: number | null;
-      historyFetchedCount: number | null;
-      historyMaybeTruncated: boolean;
-      historyStaleAt: number | null;
-      detailLastLoadedAt: number | null;
-      historyError: string | null;
-      sessionLabel: string | null;
-      statusHint: string | null;
-      canPauseForApproval: boolean;
-      pausedForApproval: boolean;
-      pausedRunId: string | null;
-      pendingExecApprovalsCount: number;
-      pendingExecApprovalsReady: boolean;
-      approvalsCoverage: "unknown" | "covered" | "uncovered";
-      meta: {
-        createdAt: string | null;
-        updatedAt: string | null;
-      };
-    }>;
+    seeds: AgentStoreSeed[];
     sessionCreatedAgentIds: string[];
     sessionSettingsSyncedAgentIds: string[];
     summaryPatches: Array<{ agentId: string; patch: Record<string, unknown> }>;

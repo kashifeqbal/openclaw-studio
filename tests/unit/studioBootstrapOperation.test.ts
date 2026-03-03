@@ -372,7 +372,7 @@ describe("studioBootstrapOperation", () => {
     expect(logError).toHaveBeenCalledTimes(1);
   });
 
-  it("plans focused persistence patch commands and executes scheduler", () => {
+  it("plans focused persistence patch commands and executes scheduler/immediate persistence", async () => {
     const filterCommands = runStudioFocusFilterPersistenceOperation({
       gatewayUrl: "https://gateway.test",
       focusFilterTouched: true,
@@ -387,15 +387,39 @@ describe("studioBootstrapOperation", () => {
     });
 
     const schedulePatch = vi.fn();
+    const applyPatchNow = vi.fn(async () => {});
     executeStudioFocusedPatchCommands({
       commands: [...filterCommands, ...selectionCommands],
       schedulePatch,
+      applyPatchNow,
     });
 
-    expect(schedulePatch).toHaveBeenCalledTimes(2);
+    await Promise.resolve();
+
+    expect(schedulePatch).toHaveBeenCalledTimes(1);
     const firstCall = schedulePatch.mock.calls[0] as [StudioSettingsPatch, number];
-    const secondCall = schedulePatch.mock.calls[1] as [StudioSettingsPatch, number];
     expect(firstCall[1]).toBe(300);
-    expect(secondCall[1]).toBe(300);
+    expect(applyPatchNow).toHaveBeenCalledTimes(1);
+    expect(applyPatchNow).toHaveBeenCalledWith({
+      focused: {
+        "https://gateway.test": {
+          mode: "focused",
+          selectedAgentId: "agent-2",
+        },
+      },
+    });
+  });
+
+  it("skips focused selected-agent persistence command when unchanged", () => {
+    const selectionCommands = runStudioFocusedSelectionPersistenceOperation({
+      gatewayUrl: "https://gateway.test",
+      status: "connected",
+      focusedPreferencesLoaded: true,
+      agentsLoadedOnce: true,
+      selectedAgentId: "agent-2",
+      lastPersistedSelectedAgentId: "agent-2",
+    });
+
+    expect(selectionCommands).toEqual([]);
   });
 });

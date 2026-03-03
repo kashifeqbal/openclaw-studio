@@ -81,12 +81,13 @@ type FocusedSelectionPatchIntent =
         | "missing-gateway-key"
         | "not-connected"
         | "focused-preferences-not-loaded"
-        | "agents-not-loaded";
+        | "agents-not-loaded"
+        | "selected-agent-unchanged";
     }
   | {
       kind: "patch";
       patch: StudioSettingsPatch;
-      debounceMs: number;
+      persistence: "immediate";
     };
 
 type StartupFleetBootstrapIntent =
@@ -111,6 +112,7 @@ export function planFocusedSelectionPatch(params: {
   focusedPreferencesLoaded: boolean;
   agentsLoadedOnce: boolean;
   selectedAgentId: string | null;
+  lastPersistedSelectedAgentId?: string | null;
 }): FocusedSelectionPatchIntent {
   const gatewayKey = params.gatewayKey.trim();
   if (!gatewayKey) {
@@ -125,6 +127,11 @@ export function planFocusedSelectionPatch(params: {
   if (!params.agentsLoadedOnce) {
     return { kind: "skip", reason: "agents-not-loaded" };
   }
+  const selectedAgentId = params.selectedAgentId?.trim() ?? "";
+  const lastPersistedSelectedAgentId = params.lastPersistedSelectedAgentId?.trim() ?? "";
+  if (selectedAgentId === lastPersistedSelectedAgentId) {
+    return { kind: "skip", reason: "selected-agent-unchanged" };
+  }
 
   return {
     kind: "patch",
@@ -132,11 +139,11 @@ export function planFocusedSelectionPatch(params: {
       focused: {
         [gatewayKey]: {
           mode: "focused",
-          selectedAgentId: params.selectedAgentId,
+          selectedAgentId: selectedAgentId.length > 0 ? selectedAgentId : null,
         },
       },
     },
-    debounceMs: FOCUSED_PATCH_DEBOUNCE_MS,
+    persistence: "immediate",
   };
 }
 

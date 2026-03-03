@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   mergeStudioSettings,
   normalizeStudioSettings,
+  resolveFocusedPreference,
 } from "@/lib/studio/settings";
 
 describe("studio settings normalization", () => {
@@ -29,6 +30,34 @@ describe("studio settings normalization", () => {
     });
 
     expect(normalized.gateway?.url).toBe("ws://localhost:18789");
+  });
+
+  it("normalizes focused preference keys to canonical loopback url", () => {
+    const normalized = normalizeStudioSettings({
+      focused: {
+        "ws://127.0.0.1:18789": {
+          mode: "focused",
+          selectedAgentId: "agent-2",
+          filter: "all",
+        },
+      },
+    });
+
+    expect(normalized.focused["ws://localhost:18789"]).toEqual({
+      mode: "focused",
+      selectedAgentId: "agent-2",
+      filter: "all",
+    });
+    expect(resolveFocusedPreference(normalized, "ws://127.0.0.1:18789")).toEqual({
+      mode: "focused",
+      selectedAgentId: "agent-2",
+      filter: "all",
+    });
+    expect(resolveFocusedPreference(normalized, "ws://localhost:18789")).toEqual({
+      mode: "focused",
+      selectedAgentId: "agent-2",
+      filter: "all",
+    });
   });
 
   it("normalizes_dual_mode_preferences", () => {
@@ -100,6 +129,34 @@ describe("studio settings normalization", () => {
       mode: "focused",
       selectedAgentId: "main",
       filter: "approvals",
+    });
+  });
+
+  it("merges focused patches across loopback aliases under one key", () => {
+    const current = normalizeStudioSettings({
+      focused: {
+        "ws://localhost:18789": {
+          mode: "focused",
+          selectedAgentId: "agent-1",
+          filter: "all",
+        },
+      },
+    });
+
+    const merged = mergeStudioSettings(current, {
+      focused: {
+        "ws://127.0.0.1:18789": {
+          selectedAgentId: "agent-2",
+        },
+      },
+    });
+
+    expect(merged.focused).toEqual({
+      "ws://localhost:18789": {
+        mode: "focused",
+        selectedAgentId: "agent-2",
+        filter: "all",
+      },
     });
   });
 

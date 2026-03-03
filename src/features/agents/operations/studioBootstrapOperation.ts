@@ -212,6 +212,9 @@ type StudioFocusedPatchCommand = {
   kind: "schedule-settings-patch";
   patch: StudioSettingsPatch;
   debounceMs: number;
+} | {
+  kind: "apply-settings-patch-now";
+  patch: StudioSettingsPatch;
 };
 
 export function runStudioFocusFilterPersistenceOperation(params: {
@@ -242,6 +245,7 @@ export function runStudioFocusedSelectionPersistenceOperation(params: {
   focusedPreferencesLoaded: boolean;
   agentsLoadedOnce: boolean;
   selectedAgentId: string | null;
+  lastPersistedSelectedAgentId?: string | null;
 }): StudioFocusedPatchCommand[] {
   const patchIntent = planFocusedSelectionPatch({
     gatewayKey: params.gatewayUrl,
@@ -249,26 +253,40 @@ export function runStudioFocusedSelectionPersistenceOperation(params: {
     focusedPreferencesLoaded: params.focusedPreferencesLoaded,
     agentsLoadedOnce: params.agentsLoadedOnce,
     selectedAgentId: params.selectedAgentId,
+    lastPersistedSelectedAgentId: params.lastPersistedSelectedAgentId,
   });
 
   if (patchIntent.kind !== "patch") {
     return [];
   }
 
-  return [
-    {
-      kind: "schedule-settings-patch",
-      patch: patchIntent.patch,
-      debounceMs: patchIntent.debounceMs,
-    },
-  ];
+  if (patchIntent.persistence === "immediate") {
+    return [
+      {
+        kind: "apply-settings-patch-now",
+        patch: patchIntent.patch,
+      },
+    ];
+  }
+
+  return [];
 }
 
 export function executeStudioFocusedPatchCommands(params: {
   commands: StudioFocusedPatchCommand[];
   schedulePatch: (patch: StudioSettingsPatch, debounceMs?: number) => void;
+  applyPatchNow: (patch: StudioSettingsPatch) => Promise<void>;
+  logError?: (message: string, error: unknown) => void;
 }): void {
   for (const command of params.commands) {
-    params.schedulePatch(command.patch, command.debounceMs);
+    if (command.kind === "schedule-settings-patch") {
+      params.schedulePatch(command.patch, command.debounceMs);
+      continue;
+    }
+    void params.applyPatchNow(command.patch).catch((error) => {
+      if (params.logError) {
+        params.logError("Failed to persist focused studio preference immediately.", error);
+      }
+    });
   }
 }

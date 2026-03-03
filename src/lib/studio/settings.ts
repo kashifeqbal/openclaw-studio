@@ -61,7 +61,7 @@ const normalizeGatewayUrl = (value: unknown) => {
 };
 
 const normalizeGatewayKey = (value: unknown) => {
-  const key = coerceString(value);
+  const key = normalizeGatewayUrl(value);
   return key ? key : null;
 };
 

@@ -164,6 +164,7 @@ const updateStudioSettings = async (
 ): Promise<StudioSettingsResponse> => {
   return fetchJson<StudioSettingsResponse>("/api/studio", {
     method: "PUT",
+    keepalive: true,
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(patch),
   });

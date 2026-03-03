@@ -128,6 +128,7 @@ describe("studioBootstrapWorkflow", () => {
         focusedPreferencesLoaded: true,
         agentsLoadedOnce: true,
         selectedAgentId: "agent-2",
+        lastPersistedSelectedAgentId: "agent-1",
       })
     ).toEqual({
       kind: "patch",
@@ -139,8 +140,21 @@ describe("studioBootstrapWorkflow", () => {
           },
         },
       },
-      debounceMs: 300,
+      persistence: "immediate",
     });
+  });
+
+  it("skips focused selected-agent patch when value is unchanged", () => {
+    expect(
+      planFocusedSelectionPatch({
+        gatewayKey: "https://gateway.test",
+        status: "connected",
+        focusedPreferencesLoaded: true,
+        agentsLoadedOnce: true,
+        selectedAgentId: "agent-2",
+        lastPersistedSelectedAgentId: "agent-2",
+      })
+    ).toEqual({ kind: "skip", reason: "selected-agent-unchanged" });
   });
 
   it("resolves focused preference restore values from settings", () => {

@@ -292,6 +292,10 @@ const AgentStudioPage = () => {
   const specialUpdateRef = useRef<Map<string, string>>(new Map());
   const seenCronEventIdsRef = useRef<Set<string>>(new Set());
   const preferredSelectedAgentIdRef = useRef<string | null>(null);
+  const lastPersistedFocusedSelectionRef = useRef<{
+    gatewayKey: string;
+    selectedAgentId: string | null;
+  } | null>(null);
   const runtimeEventHandlerRef = useRef<ReturnType<typeof createGatewayRuntimeEventHandler> | null>(
     null
   );
@@ -676,12 +680,14 @@ const AgentStudioPage = () => {
     const key = gatewayUrl.trim();
     if (!key) {
       preferredSelectedAgentIdRef.current = null;
+      lastPersistedFocusedSelectionRef.current = null;
       setFocusedPreferencesLoaded(true);
       return;
     }
     setFocusedPreferencesLoaded(false);
     focusFilterTouchedRef.current = false;
     preferredSelectedAgentIdRef.current = null;
+    lastPersistedFocusedSelectionRef.current = null;
     const loadFocusedPreferences = async () => {
       const commands = await runStudioFocusedPreferenceLoadOperation({
         gatewayUrl,
@@ -694,6 +700,11 @@ const AgentStudioPage = () => {
         setFocusedPreferencesLoaded,
         setPreferredSelectedAgentId: (agentId) => {
           preferredSelectedAgentIdRef.current = agentId;
+          const normalizedAgentId = agentId?.trim() ?? "";
+          lastPersistedFocusedSelectionRef.current = {
+            gatewayKey: key,
+            selectedAgentId: normalizedAgentId.length > 0 ? normalizedAgentId : null,
+          };
         },
         setFocusFilter,
         logError: (message, error) => console.error(message, error),
@@ -706,8 +717,19 @@ const AgentStudioPage = () => {
   }, [gatewayUrl, settingsCoordinator]);
 
   useEffect(() => {
-    return () => {
+    const flushPending = () => {
       void settingsCoordinator.flushPending();
+    };
+    const handleVisibilityChange = () => {
+      if (document.visibilityState !== "hidden") return;
+      flushPending();
+    };
+    window.addEventListener("pagehide", flushPending);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => {
+      window.removeEventListener("pagehide", flushPending);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      flushPending();
     };
   }, [settingsCoordinator]);
 
@@ -720,20 +742,38 @@ const AgentStudioPage = () => {
     executeStudioFocusedPatchCommands({
       commands,
       schedulePatch: settingsCoordinator.schedulePatch.bind(settingsCoordinator),
+      applyPatchNow: settingsCoordinator.applyPatchNow.bind(settingsCoordinator),
+      logError: (message, error) => console.error(message, error),
     });
   }, [focusFilter, gatewayUrl, settingsCoordinator]);
 
   useEffect(() => {
+    const normalizedGatewayKey = gatewayUrl.trim();
+    const normalizedSelectedAgentId = (state.selectedAgentId?.trim() ?? "") || null;
+    const lastPersistedSelection = lastPersistedFocusedSelectionRef.current;
+    const lastPersistedSelectedAgentId =
+      lastPersistedSelection && lastPersistedSelection.gatewayKey === normalizedGatewayKey
+        ? lastPersistedSelection.selectedAgentId
+        : null;
     const commands = runStudioFocusedSelectionPersistenceOperation({
       gatewayUrl,
       status: coreStatus,
       focusedPreferencesLoaded,
       agentsLoadedOnce,
       selectedAgentId: state.selectedAgentId,
+      lastPersistedSelectedAgentId,
     });
     executeStudioFocusedPatchCommands({
       commands,
       schedulePatch: settingsCoordinator.schedulePatch.bind(settingsCoordinator),
+      applyPatchNow: async (patch) => {
+        await settingsCoordinator.applyPatchNow(patch);
+        lastPersistedFocusedSelectionRef.current = {
+          gatewayKey: normalizedGatewayKey,
+          selectedAgentId: normalizedSelectedAgentId,
+        };
+      },
+      logError: (message, error) => console.error(message, error),
     });
   }, [
     agentsLoadedOnce,

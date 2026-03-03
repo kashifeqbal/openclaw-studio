@@ -39,14 +39,51 @@ test("persists_gateway_fields_to_studio_settings", async ({ page }) => {
 });
 
 test("focused_preferences_persist_across_reload", async ({ page }) => {
+  await stubRuntimeRoutes(page, {
+    fleetResult: {
+      seeds: [
+        {
+          agentId: "agent-1",
+          name: "Agent One",
+          sessionKey: "agent:agent-1:main",
+        },
+        {
+          agentId: "agent-2",
+          name: "Agent Two",
+          sessionKey: "agent:agent-2:main",
+        },
+      ],
+      sessionCreatedAgentIds: ["agent-1", "agent-2"],
+      sessionSettingsSyncedAgentIds: ["agent-1", "agent-2"],
+      summaryPatches: [],
+      suggestedSelectedAgentId: "agent-1",
+      configSnapshot: null,
+    },
+  });
+
   await page.goto("/");
 
-  await page.getByTestId("studio-menu-toggle").click();
-  await expect(page.getByTestId("gateway-settings-toggle")).toBeVisible();
+  await expect(page.getByTestId("fleet-agent-row-agent-1")).toBeVisible();
+  const selectionPersistRequest = page.waitForRequest((req) => {
+    if (!req.url().includes("/api/studio") || req.method() !== "PUT") {
+      return false;
+    }
+    const payload = JSON.parse(req.postData() ?? "{}") as {
+      focused?: Record<string, { selectedAgentId?: string | null }>;
+    };
+    if (!payload.focused) return false;
+    return Object.values(payload.focused).some(
+      (entry) => (entry.selectedAgentId ?? null) === "agent-2"
+    );
+  });
+  await page.getByTestId("fleet-agent-row-agent-2").click();
+  await selectionPersistRequest;
 
   await page.reload();
 
-  await expect(page.getByTestId("studio-menu-toggle")).toBeVisible();
+  const selectedAgentTwoRow = page.getByTestId("fleet-agent-row-agent-2");
+  await expect(selectedAgentTwoRow).toBeVisible();
+  await expect(selectedAgentTwoRow).toHaveClass(/ui-card-selected/);
 });
 
 test("clears_unseen_indicator_on_focus", async ({ page }) => {
