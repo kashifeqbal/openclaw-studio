@@ -334,7 +334,7 @@ describe("useSettingsRouteController", () => {
     });
   });
 
-  it("switches to skills tab without discard prompt when leaving capabilities", () => {
+  it("switches to automations tab without discard prompt when leaving capabilities", () => {
     const ctx = renderController({
       settingsRouteActive: true,
       settingsRouteAgentId: "agent-1",
@@ -344,33 +344,33 @@ describe("useSettingsRouteController", () => {
     });
 
     act(() => {
-      ctx.getValue().handleSettingsRouteTabChange("skills");
+      ctx.getValue().handleSettingsRouteTabChange("automations");
     });
 
     expect(ctx.confirmDiscard).not.toHaveBeenCalled();
     expect(ctx.setInspectSidebar).toHaveBeenCalledWith({
       agentId: "agent-1",
-      tab: "skills",
+      tab: "automations",
     });
   });
 
-  it("switches to system tab without discard prompt when leaving skills", () => {
+  it("switches to advanced tab without discard prompt when leaving automations", () => {
     const ctx = renderController({
       settingsRouteActive: true,
       settingsRouteAgentId: "agent-1",
-      inspectSidebar: { agentId: "agent-1", tab: "skills" },
-      activeTab: "skills" satisfies SettingsRouteTab,
+      inspectSidebar: { agentId: "agent-1", tab: "automations" },
+      activeTab: "automations" satisfies SettingsRouteTab,
       personalityHasUnsavedChanges: true,
     });
 
     act(() => {
-      ctx.getValue().handleSettingsRouteTabChange("system");
+      ctx.getValue().handleSettingsRouteTabChange("advanced");
     });
 
     expect(ctx.confirmDiscard).not.toHaveBeenCalled();
     expect(ctx.setInspectSidebar).toHaveBeenCalledWith({
       agentId: "agent-1",
-      tab: "system",
+      tab: "advanced",
     });
   });
 });

@@ -8,19 +8,11 @@ const RESERVED_MAIN_AGENT_ID = "main";
 type GuardedActionKind =
   | "delete-agent"
   | "rename-agent"
-  | "update-agent-permissions"
-  | "use-all-skills"
-  | "disable-all-skills"
-  | "set-skills-allowlist"
-  | "set-skill-enabled"
-  | "set-skill-global-enabled"
-  | "install-skill"
-  | "remove-skill"
-  | "save-skill-api-key";
+  | "update-agent-permissions";
 type CronActionKind = "run-cron-job" | "delete-cron-job";
 
 type AgentSettingsMutationRequest =
-  | { kind: GuardedActionKind; agentId: string; skillName?: string; skillKey?: string }
+  | { kind: GuardedActionKind; agentId: string }
   | { kind: "create-cron-job"; agentId: string }
   | { kind: CronActionKind; agentId: string; jobId: string };
 
@@ -39,9 +31,7 @@ type AgentSettingsMutationDenyReason =
   | "reserved-main-delete"
   | "cron-action-busy"
   | "missing-agent-id"
-  | "missing-job-id"
-  | "missing-skill-name"
-  | "missing-skill-key";
+  | "missing-job-id";
 
 type AgentSettingsMutationDecision =
   | {
@@ -63,15 +53,7 @@ const isGuardedAction = (
 ): kind is GuardedActionKind =>
   kind === "delete-agent" ||
   kind === "rename-agent" ||
-  kind === "update-agent-permissions" ||
-  kind === "use-all-skills" ||
-  kind === "disable-all-skills" ||
-  kind === "set-skills-allowlist" ||
-  kind === "set-skill-enabled" ||
-  kind === "set-skill-global-enabled" ||
-  kind === "install-skill" ||
-  kind === "remove-skill" ||
-  kind === "save-skill-api-key";
+  kind === "update-agent-permissions";
 
 const isCronActionBusy = (context: AgentSettingsMutationContext) =>
   context.cronCreateBusy ||
@@ -139,33 +121,6 @@ export const planAgentSettingsMutation = (
       normalizedAgentId,
       normalizedJobId,
     };
-  }
-
-  if (request.kind === "set-skill-enabled") {
-    const normalizedSkillName = normalizeId(request.skillName ?? "");
-    if (!normalizedSkillName) {
-      return {
-        kind: "deny",
-        reason: "missing-skill-name",
-        message: null,
-      };
-    }
-  }
-
-  if (
-    request.kind === "set-skill-global-enabled" ||
-    request.kind === "install-skill" ||
-    request.kind === "remove-skill" ||
-    request.kind === "save-skill-api-key"
-  ) {
-    const normalizedSkillKey = normalizeId(request.skillKey ?? "");
-    if (!normalizedSkillKey) {
-      return {
-        kind: "deny",
-        reason: "missing-skill-key",
-        message: null,
-      };
-    }
   }
 
   return {

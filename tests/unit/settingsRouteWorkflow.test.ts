@@ -102,10 +102,10 @@ describe("settingsRouteWorkflow", () => {
     ]);
   });
 
-  it("changes from capabilities to skills without discard confirmation", () => {
+  it("changes from capabilities to automations without discard confirmation", () => {
     expect(
       planSettingsTabChangeCommands({
-        nextTab: "skills",
+        nextTab: "automations",
         currentInspectSidebar: { agentId: "agent-1", tab: "capabilities" },
         settingsRouteAgentId: "agent-1",
         settingsRouteActive: true,
@@ -115,16 +115,16 @@ describe("settingsRouteWorkflow", () => {
     ).toEqual([
       {
         kind: "set-inspect-sidebar",
-        value: { agentId: "agent-1", tab: "skills" },
+        value: { agentId: "agent-1", tab: "automations" },
       },
     ]);
   });
 
-  it("changes from skills to system without discard confirmation", () => {
+  it("changes from automations to advanced without discard confirmation", () => {
     expect(
       planSettingsTabChangeCommands({
-        nextTab: "system",
-        currentInspectSidebar: { agentId: "agent-1", tab: "skills" },
+        nextTab: "advanced",
+        currentInspectSidebar: { agentId: "agent-1", tab: "automations" },
         settingsRouteAgentId: "agent-1",
         settingsRouteActive: true,
         personalityHasUnsavedChanges: true,
@@ -133,7 +133,7 @@ describe("settingsRouteWorkflow", () => {
     ).toEqual([
       {
         kind: "set-inspect-sidebar",
-        value: { agentId: "agent-1", tab: "system" },
+        value: { agentId: "agent-1", tab: "advanced" },
       },
     ]);
   });

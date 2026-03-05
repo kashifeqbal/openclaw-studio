@@ -10,8 +10,6 @@ export type ConfigMutationKind =
   | "delete-agent"
   | "update-agent-execution-role"
   | "update-agent-permissions"
-  | "update-agent-skills"
-  | "update-skill-setup"
   | "repair-sandbox-tool-allowlist";
 
 type QueuedConfigMutation = {

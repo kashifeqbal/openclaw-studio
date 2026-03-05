@@ -46,9 +46,6 @@ const DEFAULT_METHOD_ALLOWLIST = new Set<string>([
   "config.get",
   "config.set",
   "models.list",
-  "skills.status",
-  "skills.install",
-  "skills.update",
   "exec.approval.resolve",
   "exec.approvals.get",
   "exec.approvals.set",
@@ -85,6 +82,20 @@ const resolveOriginForUpstream = (upstreamUrl: string): string => {
       : url.hostname;
   const host = url.port ? `${hostname}:${url.port}` : hostname;
   return `${proto}//${host}`;
+};
+
+const resolveConnectFailureMessage = (error: unknown, upstreamUrl: string): string => {
+  if (!(error instanceof Error)) {
+    return "Control-plane gateway connection failed.";
+  }
+  const details = error.message.trim();
+  if (!details) {
+    return "Control-plane gateway connection failed.";
+  }
+  if (details.includes("Unexpected server response: 502")) {
+    return `Control-plane gateway connection failed: upstream ${upstreamUrl} returned HTTP 502 during websocket upgrade.`;
+  }
+  return `Control-plane gateway connection failed: ${details}`;
 };
 
 const loadGatewaySettings = (): ControlPlaneGatewaySettings => {
@@ -300,10 +311,10 @@ export class OpenClawGatewayAdapter {
         this.scheduleReconnect();
       });
 
-      ws.on("error", () => {
+      ws.on("error", (error) => {
         if (this.stopping) return;
         if (!settled) {
-          settle(() => reject(new Error("Control-plane gateway connection failed.")));
+          settle(() => reject(new Error(resolveConnectFailureMessage(error, settings.url))));
         }
       });
     }).catch((err) => {

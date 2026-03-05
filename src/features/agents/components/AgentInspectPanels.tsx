@@ -18,15 +18,12 @@ import type { AgentState } from "@/features/agents/state/store";
 import type { CronCreateDraft, CronCreateTemplateId } from "@/lib/cron/createPayloadBuilder";
 import { formatCronPayload, formatCronSchedule, type CronJobSummary } from "@/lib/cron/types";
 import type { GatewayStatus } from "@/lib/gateway/gateway-status";
-import type { SkillStatusReport } from "@/lib/skills/types";
 import { readDomainAgentFile, writeDomainAgentFile } from "@/lib/controlplane/domain-runtime-client";
 import {
   resolveExecutionRoleFromAgent,
   resolvePresetDefaultsForRole,
   type AgentPermissionsDraft,
 } from "@/features/agents/operations/agentPermissionsOperation";
-import { AgentSkillsPanel } from "@/features/agents/components/AgentSkillsPanel";
-import { SystemSkillsPanel } from "@/features/agents/components/SystemSkillsPanel";
 import {
   AGENT_FILE_NAMES,
   type AgentFileName,
@@ -91,7 +88,7 @@ const AgentInspectHeader = ({
 
 type AgentSettingsPanelProps = {
   agent: AgentState;
-  mode?: "capabilities" | "skills" | "system" | "automations" | "advanced";
+  mode?: "capabilities" | "automations" | "advanced";
   showHeader?: boolean;
   onClose: () => void;
   permissionsDraft?: AgentPermissionsDraft;
@@ -108,26 +105,6 @@ type AgentSettingsPanelProps = {
   cronCreateBusy?: boolean;
   onCreateCronJob?: (draft: CronCreateDraft) => Promise<void> | void;
   controlUiUrl?: string | null;
-  skillsReport?: SkillStatusReport | null;
-  skillsLoading?: boolean;
-  skillsError?: string | null;
-  skillsBusy?: boolean;
-  skillsBusyKey?: string | null;
-  skillMessages?: Record<string, { kind: "success" | "error"; message: string }>;
-  skillApiKeyDrafts?: Record<string, string>;
-  defaultAgentScopeWarning?: string | null;
-  systemInitialSkillKey?: string | null;
-  onSystemInitialSkillHandled?: () => void;
-  skillsAllowlist?: string[] | undefined;
-  onSetSkillEnabled?: (skillName: string, enabled: boolean) => Promise<void> | void;
-  onOpenSystemSetup?: (skillKey?: string) => void;
-  onSetSkillGlobalEnabled?: (skillKey: string, enabled: boolean) => Promise<void> | void;
-  onInstallSkill?: (skillKey: string, name: string, installId: string) => Promise<void> | void;
-  onRemoveSkill?: (
-    skill: { skillKey: string; source: string; baseDir: string }
-  ) => Promise<void> | void;
-  onSkillApiKeyChange?: (skillKey: string, value: string) => Promise<void> | void;
-  onSaveSkillApiKey?: (skillKey: string) => Promise<void> | void;
 };
 
 const formatCronStateLine = (job: CronJobSummary): string | null => {
@@ -309,24 +286,6 @@ export const AgentSettingsPanel = ({
   cronCreateBusy = false,
   onCreateCronJob = () => {},
   controlUiUrl = null,
-  skillsReport = null,
-  skillsLoading = false,
-  skillsError = null,
-  skillsBusy = false,
-  skillsBusyKey = null,
-  skillMessages = {},
-  skillApiKeyDrafts = {},
-  defaultAgentScopeWarning = null,
-  systemInitialSkillKey = null,
-  onSystemInitialSkillHandled = () => {},
-  skillsAllowlist,
-  onSetSkillEnabled = () => {},
-  onOpenSystemSetup = () => {},
-  onSetSkillGlobalEnabled = () => {},
-  onInstallSkill = () => {},
-  onRemoveSkill = () => {},
-  onSkillApiKeyChange = () => {},
-  onSaveSkillApiKey = () => {},
 }: AgentSettingsPanelProps) => {
   const initialPermissionsDraft =
     permissionsDraft ?? resolvePresetDefaultsForRole(resolveExecutionRoleFromAgent(agent));
@@ -503,11 +462,7 @@ export const AgentSettingsPanel = ({
   const panelLabel =
     mode === "advanced"
       ? "Advanced"
-      : mode === "skills"
-        ? "Skills"
-        : mode === "system"
-          ? "System setup"
-          : "";
+      : "";
   const canOpenControlUi = typeof controlUiUrl === "string" && controlUiUrl.trim().length > 0;
   const timedAutomationStepMeta =
     TIMED_AUTOMATION_STEP_META[cronCreateStep] ??
@@ -671,39 +626,6 @@ export const AgentSettingsPanel = ({
               ) : null}
             </section>
           </>
-        ) : null}
-
-        {mode === "skills" ? (
-          <AgentSkillsPanel
-            skillsReport={skillsReport}
-            skillsLoading={skillsLoading}
-            skillsError={skillsError}
-            skillsBusy={skillsBusy}
-            skillsBusyKey={skillsBusyKey}
-            skillsAllowlist={skillsAllowlist}
-            onSetSkillEnabled={onSetSkillEnabled}
-            onOpenSystemSetup={onOpenSystemSetup}
-          />
-        ) : null}
-
-        {mode === "system" ? (
-          <SystemSkillsPanel
-            skillsReport={skillsReport}
-            skillsLoading={skillsLoading}
-            skillsError={skillsError}
-            skillsBusy={skillsBusy}
-            skillsBusyKey={skillsBusyKey}
-            skillMessages={skillMessages}
-            skillApiKeyDrafts={skillApiKeyDrafts}
-            defaultAgentScopeWarning={defaultAgentScopeWarning}
-            initialSkillKey={systemInitialSkillKey}
-            onInitialSkillKeyHandled={onSystemInitialSkillHandled}
-            onSetSkillGlobalEnabled={onSetSkillGlobalEnabled}
-            onInstallSkill={onInstallSkill}
-            onRemoveSkill={onRemoveSkill}
-            onSkillApiKeyChange={onSkillApiKeyChange}
-            onSaveSkillApiKey={onSaveSkillApiKey}
-          />
         ) : null}
 
         {mode === "automations" ? (
