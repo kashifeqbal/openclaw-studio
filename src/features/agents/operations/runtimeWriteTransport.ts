@@ -16,6 +16,7 @@ export type RuntimeWriteTransport = {
     message: string;
     deliver: boolean;
     idempotencyKey: string;
+    attachments?: Array<{ type: string; mimeType: string; content: string }>;
   }) => Promise<unknown>;
   sessionSettingsSync: (params: {
     sessionKey: string;
@@ -103,11 +104,15 @@ export function createRuntimeWriteTransport(params: {
     chatSend: async (input) => {
       const normalizedSessionKey = requireNonEmpty(input.sessionKey, "Session key");
       const normalizedIdempotencyKey = requireNonEmpty(input.idempotencyKey, "Idempotency key");
-      const payload = {
-        ...input,
+      const payload: Record<string, unknown> = {
         sessionKey: normalizedSessionKey,
+        message: input.message,
+        deliver: input.deliver,
         idempotencyKey: normalizedIdempotencyKey,
       };
+      if (input.attachments && input.attachments.length > 0) {
+        payload.attachments = input.attachments;
+      }
       if (params.useDomainIntents) {
         const result = await postIntent("/api/intents/chat-send", payload);
         return unwrapIntentPayload<unknown>(result);

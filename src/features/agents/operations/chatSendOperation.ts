@@ -81,6 +81,7 @@ export async function sendChatMessageViaStudio(params: {
   agentId: string;
   sessionKey: string;
   message: string;
+  attachments?: Array<{ type: string; mimeType: string; content: string }>;
   clearRunTracking?: (runId: string) => void;
   echoUserMessage?: boolean;
   now?: () => number;
@@ -204,12 +205,21 @@ export async function sendChatMessageViaStudio(params: {
       }
     }
 
-    const sendPayload = {
+    const sendPayload: {
+      sessionKey: string;
+      message: string;
+      deliver: boolean;
+      idempotencyKey: string;
+      attachments?: Array<{ type: string; mimeType: string; content: string }>;
+    } = {
       sessionKey: params.sessionKey,
       message: buildAgentInstruction({ message: trimmed }),
       deliver: false,
       idempotencyKey: runId,
     };
+    if (params.attachments && params.attachments.length > 0) {
+      sendPayload.attachments = params.attachments;
+    }
     const sendResult = await runtimeWriteTransport.chatSend(sendPayload);
 
     if (!createdSession) {
