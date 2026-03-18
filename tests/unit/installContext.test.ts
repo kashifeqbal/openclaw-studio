@@ -38,6 +38,7 @@ describe("studio install context helpers", () => {
     });
 
     expect(warnings.map((warning) => warning.id)).toContain("tailscale-ws");
+    expect(warnings.map((warning) => warning.id)).toContain("remote-ws-control-ui-auth");
     expect(warnings.map((warning) => warning.id)).toContain("tailscale-still-needs-token");
   });
 

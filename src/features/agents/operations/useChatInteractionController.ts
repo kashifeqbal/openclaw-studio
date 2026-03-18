@@ -45,7 +45,7 @@ type ChatInteractionController = {
   stopBusyAgentId: string | null;
   flushPendingDraft: (agentId: string | null) => void;
   handleDraftChange: (agentId: string, value: string) => void;
-  handleSend: (agentId: string, sessionKey: string, message: string) => Promise<void>;
+  handleSend: (agentId: string, sessionKey: string, message: string, attachments?: Array<{ type: string; mimeType: string; content: string }>) => Promise<void>;
   removeQueuedMessage: (agentId: string, index: number) => void;
   handleNewSession: (agentId: string) => Promise<void>;
   handleStopRun: (agentId: string, sessionKey: string, runId?: string | null) => Promise<void>;
@@ -188,9 +188,10 @@ export function useChatInteractionController(
   );
 
   const handleSend = useCallback(
-    async (agentId: string, sessionKey: string, message: string) => {
+    async (agentId: string, sessionKey: string, message: string, attachments?: Array<{ type: string; mimeType: string; content: string }>) => {
       const trimmed = message.trim();
-      if (!trimmed) return;
+      const hasAttachments = attachments && attachments.length > 0;
+      if (!trimmed && !hasAttachments) return;
       const pendingDraftTimer = pendingDraftTimersRef.current.get(agentId) ?? null;
       if (pendingDraftTimer !== null) {
         window.clearTimeout(pendingDraftTimer);
@@ -227,6 +228,7 @@ export function useChatInteractionController(
         agentId,
         sessionKey,
         message: trimmed,
+        attachments: hasAttachments ? attachments : undefined,
         clearRunTracking: (runId) => params.clearRunTracking(runId),
       });
     },

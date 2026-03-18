@@ -181,6 +181,15 @@ export const resolveGatewayConnectionWarnings = (params: {
     });
   }
 
+  if (!localGateway && parsed.protocol === "ws:") {
+    warnings.push({
+      id: "remote-ws-control-ui-auth",
+      tone: "warn",
+      message:
+        "Remote ws:// gateway URLs are fragile with modern OpenClaw auth. Prefer wss:// via Tailscale Serve, or tunnel the gateway to ws://localhost from the Studio host.",
+    });
+  }
+
   if (!localGateway && isPrivateHost(hostname)) {
     warnings.push({
       id: "private-ip-advanced",

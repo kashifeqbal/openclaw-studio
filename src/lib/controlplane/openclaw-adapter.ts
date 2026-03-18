@@ -105,6 +105,11 @@ const resolveConnectFailureMessage = (error: unknown, upstreamUrl: string): stri
   return `Control-plane gateway connection failed: ${details}`;
 };
 
+const isConnectRejectionError = (error: unknown): boolean => {
+  if (!(error instanceof Error)) return false;
+  return error.message.startsWith("Control-plane connect rejected:");
+};
+
 const loadGatewaySettings = (): ControlPlaneGatewaySettings => {
   const settings = loadStudioSettings();
   const gateway = settings.gateway;
@@ -261,6 +266,7 @@ export class OpenClawGatewayAdapter {
 
     await new Promise<void>((resolve, reject) => {
       let settled = false;
+      let allowReconnectAfterClose = true;
       const settle = (fn: () => void) => {
         if (settled) return;
         settled = true;
@@ -307,6 +313,7 @@ export class OpenClawGatewayAdapter {
           const code = parsed.error?.code ?? "CONNECT_FAILED";
           const message = parsed.error?.message ?? "Connect failed.";
           settle(() => {
+            allowReconnectAfterClose = false;
             ws.close(1011, "connect failed");
             reject(new Error(`Control-plane connect rejected: ${code} ${message}`));
           });
@@ -321,6 +328,9 @@ export class OpenClawGatewayAdapter {
         }
         this.rejectPending("Control-plane gateway connection closed.");
         this.connectionEpoch = null;
+        if (!allowReconnectAfterClose) {
+          return;
+        }
         this.updateStatus("reconnecting", "gateway_closed");
         this.scheduleReconnect();
       });
@@ -334,7 +344,9 @@ export class OpenClawGatewayAdapter {
     }).catch((err) => {
       this.connectionEpoch = null;
       this.updateStatus("error", err instanceof Error ? err.message : "connect_error");
-      this.scheduleReconnect();
+      if (!isConnectRejectionError(err)) {
+        this.scheduleReconnect();
+      }
       throw err;
     });
   }

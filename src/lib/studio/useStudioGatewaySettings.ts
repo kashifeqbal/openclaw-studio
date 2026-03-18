@@ -38,7 +38,17 @@ const normalizeLocalGatewayDefaults = (value: unknown): StudioGatewaySettings | 
 };
 
 const formatGatewayError = (error: unknown): string => {
-  if (error instanceof Error) return error.message;
+  if (error instanceof Error) {
+    const message = error.message.trim();
+    const normalized = message.toLowerCase();
+    if (
+      normalized.includes("control ui requires device identity") ||
+      normalized.includes("secure context")
+    ) {
+      return "OpenClaw rejected this connection because its control-ui compatibility mode needs HTTPS or localhost device identity. Use wss:// via Tailscale Serve, or tunnel the gateway to ws://localhost from the Studio host.";
+    }
+    return message;
+  }
   return "Unknown gateway error.";
 };
 
@@ -354,7 +364,9 @@ export const useStudioGatewaySettings = (
         }),
       });
       if (response.ok !== true) {
-        const message = readString(response.error) || "Connection test failed.";
+        const message = readString(response.error)
+          ? formatGatewayError(new Error(readString(response.error)))
+          : "Connection test failed.";
         setActionError(message);
         setTestResult({ kind: "error", message });
         return false;

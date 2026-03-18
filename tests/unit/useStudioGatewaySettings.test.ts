@@ -171,4 +171,38 @@ describe("useStudioGatewaySettings", () => {
     expect(ctx.getValue().disconnecting).toBe(false);
     ctx.unmount();
   });
+
+  it("shows actionable guidance for control-ui secure-context gateway errors", async () => {
+    mockedFetchJson.mockImplementation(async (input) => {
+      if (input === "/api/studio/test-connection") {
+        return {
+          ok: false,
+          error:
+            "Control-plane connect rejected: INVALID_REQUEST control ui requires device identity (use HTTPS or localhost secure context)",
+        };
+      }
+      throw new Error(`Unexpected fetchJson call: ${String(input)}`);
+    });
+
+    const ctx = renderHook();
+
+    await waitFor(() => {
+      expect(ctx.getValue().status).toBe("connected");
+    });
+
+    await act(async () => {
+      await ctx.getValue().testConnection();
+    });
+
+    expect(ctx.getValue().testResult).toEqual({
+      kind: "error",
+      message:
+        "OpenClaw rejected this connection because its control-ui compatibility mode needs HTTPS or localhost device identity. Use wss:// via Tailscale Serve, or tunnel the gateway to ws://localhost from the Studio host.",
+    });
+    expect(ctx.getValue().error).toBe(
+      "OpenClaw rejected this connection because its control-ui compatibility mode needs HTTPS or localhost device identity. Use wss:// via Tailscale Serve, or tunnel the gateway to ws://localhost from the Studio host."
+    );
+
+    ctx.unmount();
+  });
 });

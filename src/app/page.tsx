@@ -264,6 +264,7 @@ const AgentStudioPage = () => {
 
   const { state, dispatch, hydrateAgents, setError, setLoading } = useAgentStore();
   const [showConnectionPanel, setShowConnectionPanel] = useState(false);
+  const [showConnectSetup, setShowConnectSetup] = useState(false);
   const [focusFilter, setFocusFilter] = useState<FocusFilter>("all");
   const [focusedPreferencesLoaded, setFocusedPreferencesLoaded] = useState(false);
   const [agentsLoadedOnce, setAgentsLoadedOnce] = useState(false);
@@ -1370,32 +1371,44 @@ const AgentStudioPage = () => {
     }
   }, [gatewayError]);
 
-  if (!agentsLoadedOnce && !coreConnected && (!didAttemptGatewayConnect || gatewayConnecting)) {
+  if (
+    !agentsLoadedOnce &&
+    !coreConnected &&
+    !showConnectSetup &&
+    (!didAttemptGatewayConnect || gatewayConnecting)
+  ) {
     return (
       <div className="relative min-h-dvh w-screen overflow-hidden bg-background">
         <div className="flex min-h-dvh items-center justify-center px-6">
-          <div className="glass-panel ui-panel w-full max-w-md px-6 py-6 text-center">
+          <div className="glass-panel ui-panel flex w-full max-w-md flex-col items-center px-6 py-6 text-center">
             <div className="font-mono text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
               OpenClaw Studio
             </div>
             <div className="mt-3 text-sm text-muted-foreground">
               {gatewayConnecting ? "Connecting to gateway…" : "Booting Studio…"}
             </div>
+            <button
+              type="button"
+              className="ui-btn-secondary mt-4 px-4 py-2 text-xs font-semibold tracking-[0.05em] text-foreground"
+              onClick={() => setShowConnectSetup(true)}
+            >
+              Edit connection settings
+            </button>
           </div>
         </div>
       </div>
     );
   }
 
-  if (!coreConnected && !agentsLoadedOnce && didAttemptGatewayConnect) {
+  if (!coreConnected && !agentsLoadedOnce && (didAttemptGatewayConnect || showConnectSetup)) {
     return (
-      <div className="relative min-h-dvh w-screen overflow-hidden bg-background">
-        <div className="relative z-10 flex h-dvh flex-col">
+      <div className="relative min-h-dvh w-screen overflow-y-auto bg-background">
+        <div className="relative z-10 flex min-h-dvh flex-col">
           <HeaderBar
             status={gatewayStatus}
             onConnectionSettings={() => setShowConnectionPanel(true)}
           />
-          <div className="flex min-h-0 flex-1 flex-col gap-4 px-3 pb-3 pt-3 sm:px-4 sm:pb-4 sm:pt-4 md:px-6 md:pb-6 md:pt-4">
+          <div className="flex flex-1 flex-col gap-4 px-3 pb-6 pt-3 sm:px-4 sm:pb-6 sm:pt-4 md:px-6 md:pt-4">
             {settingsRouteActive ? (
               <div className="w-full">
                 <button

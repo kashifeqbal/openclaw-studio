@@ -345,7 +345,7 @@ export const GatewayConnectScreen = ({
     </div>
   );
   return (
-    <div className="mx-auto flex min-h-0 w-full max-w-[820px] flex-1 flex-col gap-5">
+    <div className="mx-auto flex w-full max-w-[820px] flex-1 flex-col gap-5 pb-4">
       <div className="ui-card px-4 py-2">
         <div className="flex items-start gap-3">
           {status === "connecting" || status === "reconnecting" ? (

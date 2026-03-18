@@ -202,6 +202,71 @@ describe("OpenClawGatewayAdapter", () => {
     await adapter.stop();
   });
 
+  it("does not retry after the gateway rejects the connect request", async () => {
+    vi.useFakeTimers();
+
+    class RejectingConnectSocket extends EventEmitter {
+      readyState: number = WebSocket.OPEN;
+
+      close() {
+        if (this.readyState === WebSocket.CLOSED) return;
+        this.readyState = WebSocket.CLOSED;
+        this.emit("close");
+      }
+
+      terminate() {
+        this.close();
+      }
+
+      send(raw: string, callback?: (err?: Error) => void) {
+        const parsed = JSON.parse(raw) as { id?: string; method?: string };
+        callback?.();
+        if (parsed.method !== "connect" || !parsed.id) {
+          return;
+        }
+        queueMicrotask(() => {
+          this.emit(
+            "message",
+            JSON.stringify({
+              type: "res",
+              id: parsed.id,
+              ok: false,
+              error: {
+                code: "INVALID_REQUEST",
+                message: "control ui requires device identity (use HTTPS or localhost secure context)",
+              },
+            })
+          );
+        });
+      }
+    }
+
+    const createWebSocket = vi.fn(() => {
+      const socket = new RejectingConnectSocket();
+      queueMicrotask(() => {
+        socket.emit(
+          "message",
+          JSON.stringify({ type: "event", event: "connect.challenge", payload: {} })
+        );
+      });
+      return socket as unknown as WebSocket;
+    });
+
+    const adapter = new OpenClawGatewayAdapter({
+      loadSettings: () => ({ url: "ws://10.0.0.8:18789", token: "tkn" }),
+      createWebSocket,
+    });
+
+    await expect(adapter.start()).rejects.toThrow(
+      "Control-plane connect rejected: INVALID_REQUEST control ui requires device identity"
+    );
+
+    await vi.advanceTimersByTimeAsync(20_000);
+    expect(createWebSocket).toHaveBeenCalledTimes(1);
+
+    await adapter.stop();
+  });
+
   it("emits gateway events with unique connection epochs across reconnect cycles", async () => {
     upstream = new WebSocketServer({ port: 0 });
     const address = upstream.address();

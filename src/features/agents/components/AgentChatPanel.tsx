@@ -14,7 +14,7 @@ import {
 import type { AgentState as AgentRecord } from "@/features/agents/state/store";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { Check, ChevronRight, Clock, Cog, Maximize2, Pencil, Shuffle, Trash2, X } from "lucide-react";
+import { Check, ChevronRight, Clock, Cog, Maximize2, Paperclip, Pencil, Shuffle, Trash2, X } from "lucide-react";
 import type { GatewayModelChoice } from "@/lib/gateway/models";
 import { rewriteMediaLinesToMarkdown } from "@/lib/text/media-markdown";
 import { normalizeAssistantDisplayText } from "@/lib/text/assistantText";
@@ -143,7 +143,7 @@ type AgentChatPanelProps = {
   onToolCallingToggle?: (enabled: boolean) => void;
   onThinkingTracesToggle?: (enabled: boolean) => void;
   onDraftChange: (value: string) => void;
-  onSend: (message: string) => void;
+  onSend: (message: string, attachments?: Array<{ type: string; mimeType: string; content: string }>) => void;
   onRemoveQueuedMessage?: (index: number) => void;
   onStopRun: () => void;
   onAvatarShuffle: () => void;
@@ -973,6 +973,58 @@ const InlineHoverTooltip = ({
   );
 };
 
+type ChatAttachment = {
+  id: string;
+  dataUrl: string;
+  mimeType: string;
+  fileName?: string;
+};
+
+const ACCEPTED_IMAGE_TYPES = ["image/png", "image/jpeg", "image/gif", "image/webp"];
+const MAX_FILE_SIZE = 25 * 1024 * 1024; // 25MB
+
+const generateAttachmentId = () =>
+  `att-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+
+const parseDataUrl = (dataUrl: string): { mimeType: string; content: string } | null => {
+  const match = /^data:([^;]+);base64,(.+)$/.exec(dataUrl);
+  return match ? { mimeType: match[1], content: match[2] } : null;
+};
+
+const AttachmentPreviewStrip = memo(function AttachmentPreviewStrip({
+  attachments,
+  onRemove,
+}: {
+  attachments: ChatAttachment[];
+  onRemove: (id: string) => void;
+}) {
+  if (attachments.length === 0) return null;
+  return (
+    <div className="mb-2 flex flex-wrap gap-2">
+      {attachments.map((att) => (
+        <div
+          key={att.id}
+          className="group/att relative h-12 w-12 overflow-hidden rounded-md border border-border/70 bg-surface-3"
+        >
+          <img
+            src={att.dataUrl}
+            alt={att.fileName ?? "Attachment"}
+            className="h-full w-full object-cover"
+          />
+          <button
+            type="button"
+            className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-destructive text-destructive-foreground opacity-0 shadow-sm transition group-hover/att:opacity-100"
+            onClick={() => onRemove(att.id)}
+            aria-label={`Remove ${att.fileName ?? "attachment"}`}
+          >
+            <X className="h-2.5 w-2.5" />
+          </button>
+        </div>
+      ))}
+    </div>
+  );
+});
+
 const AgentChatComposer = memo(function AgentChatComposer({
   value,
   onChange,
@@ -997,6 +1049,8 @@ const AgentChatComposer = memo(function AgentChatComposer({
   showThinkingTraces,
   onToolCallingToggle,
   onThinkingTracesToggle,
+  attachments,
+  onAttachmentsChange,
 }: {
   value: string;
   onChange: (event: ChangeEvent<HTMLTextAreaElement>) => void;
@@ -1021,7 +1075,98 @@ const AgentChatComposer = memo(function AgentChatComposer({
   showThinkingTraces: boolean;
   onToolCallingToggle: (enabled: boolean) => void;
   onThinkingTracesToggle: (enabled: boolean) => void;
+  attachments: ChatAttachment[];
+  onAttachmentsChange: (attachments: ChatAttachment[]) => void;
 }) {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [isDragOver, setIsDragOver] = useState(false);
+
+  const addFiles = useCallback(
+    (files: FileList | File[]) => {
+      const fileArray = Array.from(files);
+      for (const file of fileArray) {
+        if (!ACCEPTED_IMAGE_TYPES.includes(file.type)) continue;
+        if (file.size > MAX_FILE_SIZE) continue;
+        const reader = new FileReader();
+        reader.addEventListener("load", () => {
+          const dataUrl = reader.result as string;
+          onAttachmentsChange([
+            ...attachments,
+            {
+              id: generateAttachmentId(),
+              dataUrl,
+              mimeType: file.type,
+              fileName: file.name,
+            },
+          ]);
+        });
+        reader.readAsDataURL(file);
+      }
+    },
+    [attachments, onAttachmentsChange]
+  );
+
+  const handlePaste = useCallback(
+    (event: React.ClipboardEvent<HTMLTextAreaElement>) => {
+      const items = event.clipboardData?.items;
+      if (!items) return;
+      const imageItems: DataTransferItem[] = [];
+      for (let i = 0; i < items.length; i++) {
+        if (items[i].type.startsWith("image/")) {
+          imageItems.push(items[i]);
+        }
+      }
+      if (imageItems.length === 0) return;
+      event.preventDefault();
+      for (const item of imageItems) {
+        const file = item.getAsFile();
+        if (!file) continue;
+        addFiles([file]);
+      }
+    },
+    [addFiles]
+  );
+
+  const handleDragOver = useCallback((event: React.DragEvent) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setIsDragOver(true);
+  }, []);
+
+  const handleDragLeave = useCallback((event: React.DragEvent) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setIsDragOver(false);
+  }, []);
+
+  const handleDrop = useCallback(
+    (event: React.DragEvent) => {
+      event.preventDefault();
+      event.stopPropagation();
+      setIsDragOver(false);
+      if (event.dataTransfer?.files) {
+        addFiles(event.dataTransfer.files);
+      }
+    },
+    [addFiles]
+  );
+
+  const handleFileSelect = useCallback(
+    (event: React.ChangeEvent<HTMLInputElement>) => {
+      if (event.target.files) {
+        addFiles(event.target.files);
+      }
+      event.target.value = "";
+    },
+    [addFiles]
+  );
+
+  const handleRemoveAttachment = useCallback(
+    (id: string) => {
+      onAttachmentsChange(attachments.filter((att) => att.id !== id));
+    },
+    [attachments, onAttachmentsChange]
+  );
   const stopReason = stopDisabledReason?.trim() ?? "";
   const stopDisabled = !canSend || stopBusy || Boolean(stopReason);
   const stopAriaLabel = stopReason ? `Stop unavailable: ${stopReason}` : "Stop";
@@ -1050,7 +1195,27 @@ const AgentChatComposer = memo(function AgentChatComposer({
   }, [thinkingValue]);
   const thinkingSelectWidthCh = Math.max(9, Math.min(16, thinkingSelectedLabel.length + 6));
   return (
-    <div className="w-full max-w-full overflow-hidden rounded-2xl border border-border/65 bg-surface-2/45 px-3 py-2">
+    <div
+      className={`w-full max-w-full overflow-hidden rounded-2xl border bg-surface-2/45 px-3 py-2 transition-colors ${
+        isDragOver ? "border-primary/60 bg-primary/5" : "border-border/65"
+      }`}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+    >
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept={ACCEPTED_IMAGE_TYPES.join(",")}
+        multiple
+        className="hidden"
+        onChange={handleFileSelect}
+        aria-hidden="true"
+      />
+      <AttachmentPreviewStrip
+        attachments={attachments}
+        onRemove={handleRemoveAttachment}
+      />
       {queuedMessages.length > 0 ? (
         <div
           className={`mb-2 grid items-start gap-2 ${
@@ -1111,6 +1276,15 @@ const AgentChatComposer = memo(function AgentChatComposer({
         </div>
       ) : null}
       <div className="flex min-w-0 items-end gap-2">
+        <button
+          type="button"
+          className="mb-1 flex h-7 w-7 flex-none items-center justify-center rounded-md text-muted-foreground transition hover:bg-surface-3 hover:text-foreground"
+          onClick={() => fileInputRef.current?.click()}
+          aria-label="Attach file"
+          title="Attach image"
+        >
+          <Paperclip className="h-4 w-4" />
+        </button>
         <textarea
           ref={inputRef}
           rows={1}
@@ -1118,6 +1292,7 @@ const AgentChatComposer = memo(function AgentChatComposer({
           className="chat-composer-input min-h-[28px] max-h-[34vh] min-w-0 flex-1 resize-none border-0 bg-transparent px-0 py-1 text-[16px] leading-6 text-foreground outline-none shadow-none transition placeholder:text-muted-foreground/65 focus:outline-none focus-visible:outline-none focus-visible:ring-0 sm:text-[15px]"
           onChange={onChange}
           onKeyDown={onKeyDown}
+          onPaste={handlePaste}
           placeholder="type a message"
         />
         {running ? (
@@ -1255,6 +1430,7 @@ export const AgentChatPanel = ({
   const [renameDraft, setRenameDraft] = useState(agent.name);
   const [renameError, setRenameError] = useState<string | null>(null);
   const [transcriptModalOpen, setTranscriptModalOpen] = useState(false);
+  const [chatAttachments, setChatAttachments] = useState<ChatAttachment[]>([]);
   const draftRef = useRef<HTMLTextAreaElement | null>(null);
   const renameInputRef = useRef<HTMLInputElement | null>(null);
   const renameEditorRef = useRef<HTMLDivElement | null>(null);
@@ -1787,6 +1963,8 @@ export const AgentChatPanel = ({
             showThinkingTraces={agent.showThinkingTraces}
             onToolCallingToggle={onToolCallingToggle}
             onThinkingTracesToggle={onThinkingTracesToggle}
+            attachments={chatAttachments}
+            onAttachmentsChange={setChatAttachments}
           />
         </div>
       </div>
